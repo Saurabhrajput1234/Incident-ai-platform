@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: incident-ai-platform
+Version: 0.1.0
+Summary: AI-powered incident management platform
+Requires-Python: >=3.11
+Requires-Dist: fastapi==0.109.0
+Requires-Dist: uvicorn[standard]==0.27.0
+Requires-Dist: pydantic-settings==2.1.0
+Requires-Dist: python-dotenv==1.0.0
+Requires-Dist: sqlalchemy==2.0.25
+Requires-Dist: asyncpg==0.29.0
+Requires-Dist: alembic==1.13.1
