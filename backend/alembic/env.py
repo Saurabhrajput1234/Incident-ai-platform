@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from app.core.config import settings
 from app.database.postgres.base import Base
-import app.modules.incidents.model  # noqa: F401 — ensures model is registered with Base.metadata
+import app.modules.incidents.model  # noqa: F401
+import app.modules.shift_roster.model  # noqa: F401
 
 # this is the Alembic Config object
 config = context.config
