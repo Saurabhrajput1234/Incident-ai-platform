@@ -11,9 +11,6 @@ Architecture follows Clean Architecture principles:
 API Layer → Service Layer → Repository Layer → Database
 ```
 
-Business logic never lives in API routes.
-Database can be replaced (e.g. PostgreSQL → ServiceNow) by swapping only the repository layer.
-
 ---
 
 ## Tech Stack
@@ -28,7 +25,8 @@ Database can be replaced (e.g. PostgreSQL → ServiceNow) by swapping only the r
 | Alembic | 1.13.1 | Database migrations |
 | Pydantic | 2.x | Data validation |
 | pydantic-settings | 2.1.0 | Config management |
-| python-dotenv | 1.0.0 | .env loading |
+| openpyxl | 3.1.2 | Excel file parsing |
+| python-multipart | 0.0.9 | File upload support |
 | pytest | 7.4.4 | Testing |
 | pytest-asyncio | 0.23.3 | Async test support |
 | httpx | 0.26.0 | HTTP client for tests |
@@ -41,114 +39,77 @@ Database can be replaced (e.g. PostgreSQL → ServiceNow) by swapping only the r
 ```
 backend/
 ├── app/
-│   ├── main.py                            # FastAPI app bootstrap
-│   ├── __init__.py
-│   │
+│   ├── main.py
 │   ├── api/
-│   │   ├── router.py                      # Central router — registers all versioned routers
-│   │   ├── dependencies.py                # Shared API dependencies (placeholder)
+│   │   ├── router.py
+│   │   ├── dependencies.py
 │   │   └── v1/
-│   │       ├── health.py                  # GET /v1/health
-│   │       ├── db_health.py               # GET /v1/db-health
-│   │       └── incidents.py               # Incident REST endpoints
-│   │
+│   │       ├── health.py
+│   │       ├── db_health.py
+│   │       ├── incidents.py
+│   │       └── shift_roster.py
 │   ├── core/
 │   │   ├── config/
-│   │   │   ├── __init__.py                # Exports settings singleton
-│   │   │   ├── app.py                     # App name, version, CORS, prefix
-│   │   │   ├── database.py                # DATABASE_URL
-│   │   │   ├── logging.py                 # LOG_LEVEL
-│   │   │   ├── security.py                # SECRET_KEY, JWT config
-│   │   │   └── settings.py                # Merges all config → settings instance
-│   │   ├── lifecycle.py                   # Startup / shutdown events
-│   │   ├── logging.py                     # Logger configuration
-│   │   └── middleware.py                  # CORS middleware registration
-│   │
+│   │   │   ├── __init__.py
+│   │   │   ├── app.py
+│   │   │   ├── database.py
+│   │   │   ├── logging.py
+│   │   │   ├── security.py
+│   │   │   └── settings.py
+│   │   ├── lifecycle.py
+│   │   ├── logging.py
+│   │   └── middleware.py
 │   ├── common/
-│   │   ├── constants/
-│   │   │   └── app.py                     # DEFAULT_PAGE_SIZE, date formats
-│   │   ├── enums/
-│   │   │   └── base.py                    # Environment, Status enums
+│   │   ├── constants/app.py
+│   │   ├── enums/base.py
 │   │   ├── exceptions/
-│   │   │   ├── base.py                    # NotFoundError, BadRequestError, etc.
-│   │   │   └── handlers.py                # HTTP, validation, 500 exception handlers
-│   │   ├── responses/
-│   │   │   └── base.py                    # SuccessResponse[T], ErrorResponse
-│   │   ├── schemas/
-│   │   │   └── pagination.py              # PaginationParams, PaginatedResponse[T]
-│   │   ├── security/                      # Placeholder — auth utilities (future)
-│   │   ├── types/                         # Placeholder — custom types (future)
-│   │   ├── utils/
-│   │   │   ├── datetime.py                # utcnow(), format_datetime()
-│   │   │   └── uuid.py                    # generate_uuid(), is_valid_uuid()
-│   │   └── validators/
-│   │       └── common.py                  # is_valid_email(), is_non_empty_string()
-│   │
+│   │   │   ├── base.py
+│   │   │   └── handlers.py
+│   │   ├── responses/base.py
+│   │   ├── schemas/pagination.py
+│   │   ├── utils/datetime.py
+│   │   ├── utils/uuid.py
+│   │   └── validators/common.py
 │   ├── database/
 │   │   └── postgres/
-│   │       ├── base.py                    # SQLAlchemy declarative Base
-│   │       └── session.py                 # Async engine + session factory + get_db()
-│   │
+│   │       ├── base.py
+│   │       └── session.py
 │   ├── modules/
-│   │   ├── incidents/                     # ✅ Implemented (Phase 2)
-│   │   │   ├── __init__.py
-│   │   │   ├── enums.py                   # Priority, State, Category, Impact, etc.
-│   │   │   ├── model.py                   # SQLAlchemy Incident model
-│   │   │   ├── schemas.py                 # Pydantic schemas (Create/Update/Response)
-│   │   │   ├── repository.py              # DB operations only
-│   │   │   └── service.py                 # Business logic layer
-│   │   ├── agents/                        # Placeholder — future AI agents
-│   │   │   ├── triage/
-│   │   │   ├── acknowledgement/
-│   │   │   ├── pending/
-│   │   │   └── resolution/
-│   │   ├── analytics/                     # Placeholder
-│   │   ├── audit/                         # Placeholder
-│   │   ├── knowledge/                     # Placeholder
-│   │   ├── orchestrator/                  # Placeholder
-│   │   ├── settings/                      # Placeholder
-│   │   └── users/                         # Placeholder
-│   │
-│   ├── platform/                          # Infrastructure platform layer (future)
-│   │   ├── caching/
-│   │   ├── events/
-│   │   ├── execution/
-│   │   ├── messaging/
-│   │   ├── registry/
-│   │   ├── scheduler/
-│   │   ├── telemetry/
-│   │   └── workers/
-│   │
-│   ├── ai_platfrom/                       # AI platform integrations (future)
-│   ├── integrations/                      # External integrations e.g. ServiceNow (future)
-│   ├── workers/                           # Background workers (future)
+│   │   ├── incidents/
+│   │   │   ├── enums.py
+│   │   │   ├── model.py
+│   │   │   ├── schemas.py
+│   │   │   ├── repository.py
+│   │   │   └── service.py
+│   │   └── shift_roster/
+│   │       ├── enums.py
+│   │       ├── model.py
+│   │       ├── schemas.py
+│   │       ├── repository.py
+│   │       ├── service.py
+│   │       └── parser.py
+│   ├── platform/
+│   │   ├── caching/ events/ execution/ messaging/
+│   │   ├── registry/ scheduler/ telemetry/ workers/
+│   ├── ai_platfrom/
+│   ├── integrations/
+│   ├── workers/
 │   └── tests/
-│       ├── conftest.py                    # Fixtures, test DB setup
-│       ├── api/
-│       │   └── test_incidents_api.py      # 14 integration tests
-│       ├── unit/
-│       │   └── test_incident_service.py   # 9 unit tests
-│       └── integration/                   # Placeholder
-│
+│       ├── conftest.py
+│       ├── api/test_incidents_api.py
+│       └── unit/test_incident_service.py
 ├── alembic/
-│   ├── env.py                             # Migration environment
-│   ├── script.py.mako                     # Migration file template
 │   └── versions/
-│       └── 78b5282e58c6_create_incidents_table.py
-│
+│       ├── 78b5282e58c6_create_incidents_table.py
+│       ├── 15fef2bf1df7_create_shift_roster_table.py
+│       └── 9092bd4e4a4f_normalized_shift_roster_schema.py
 ├── scripts/
-│   └── seed_incidents.py                  # Seeds 100 realistic incidents
-│
+│   └── seed_incidents.py
 ├── docs/
-│   └── implementation.md                  # This file
-│
-├── docker/                                # Docker configs (future)
-├── alembic.ini                            # Alembic configuration
-├── pyproject.toml                         # Project dependencies
-├── pytest.ini                             # Test configuration
-├── .env                                   # Local environment (not committed)
-├── .env.example                           # Environment template
-├── .gitignore
+├── alembic.ini
+├── pyproject.toml
+├── pytest.ini
+├── .env / .env.example
 └── README.md
 ```
 
@@ -156,13 +117,11 @@ backend/
 
 # Phase 1 — Foundation ✅
 
-## Status
-
 | Task | Status |
 |---|---|
 | Project folder structure | ✅ |
 | Virtual environment | ✅ |
-| Dependency management (pyproject.toml) | ✅ |
+| Dependency management | ✅ |
 | Configuration (.env) | ✅ |
 | FastAPI application | ✅ |
 | Logging | ✅ |
@@ -174,532 +133,309 @@ backend/
 | README | ✅ |
 | Git repository | ⏸️ Deferred |
 
-## Setup
-
-```bash
-# 1. Create and activate virtual environment
-python -m venv venv
-venv\Scripts\activate          # Windows
-source venv/bin/activate       # Linux/Mac
-
-# 2. Install dependencies
-pip install -e .
-
-# 3. Create environment file
-copy .env.example .env         # then edit with your values
-
-# 4. Run server
-uvicorn app.main:app --reload
-```
-
-## Environment Variables (.env)
+## Environment Variables
 
 ```env
-# Application
 APP_NAME=Incident AI Platform
 APP_VERSION=0.1.0
 ENVIRONMENT=development
 DEBUG=true
-
-# API
 API_V1_PREFIX=/v1
 ALLOWED_ORIGINS=["http://localhost:3000","http://localhost:8000"]
-
-# Logging
 LOG_LEVEL=INFO
-
-# Database
 DATABASE_URL=postgresql+asyncpg://postgres:yourpassword@localhost:5432/incident_ai
-
-# Security
 SECRET_KEY=changeme
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 ALGORITHM=HS256
 ```
 
-> ALLOWED_ORIGINS must be a valid JSON array string.
-> If your password contains special characters, URL-encode them: @ → %40, # → %23
-
-## Configuration (app/core/config/)
-
-Config is split into focused files and merged in settings.py:
-
-| File | Responsibility |
-|---|---|
-| app.py | APP_NAME, VERSION, ENVIRONMENT, DEBUG, API_V1_PREFIX, ALLOWED_ORIGINS |
-| database.py | DATABASE_URL |
-| logging.py | LOG_LEVEL |
-| security.py | SECRET_KEY, ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM |
-| settings.py | Merges all into single Settings class → singleton `settings` |
-| __init__.py | Exports `settings` for use across the app |
-
-Import usage:
-```python
-from app.core.config import settings
-```
-
-## Application Entry Point (app/main.py)
-
-Registers in order:
-1. CORS Middleware via `register_middlewares(app)`
-2. Exception handlers from `common/exceptions/handlers.py`
-3. API router with `/v1` prefix from settings
-4. FastAPI lifespan for startup/shutdown
-
-## Logging (app/core/logging.py)
-
-Outputs to stdout. Format:
-```
-2026-07-30 12:00:00,000 - name - INFO - message
-```
-Level controlled by `LOG_LEVEL` in .env.
-
-## CORS Middleware (app/core/middleware.py)
-
-`register_middlewares(app)` registers CORS with `ALLOWED_ORIGINS` from settings.
-Allows all methods and headers with credentials enabled.
-
-## Exception Handlers (app/common/exceptions/handlers.py)
-
-| Handler | Trigger | HTTP Status |
-|---|---|---|
-| http_exception_handler | Any HTTPException | varies |
-| validation_exception_handler | Invalid request body/params | 422 |
-| general_exception_handler | Unhandled exceptions | 500 |
-
-Response format:
-```json
-{"detail": "...", "status_code": 404}
-```
-
-## Custom Exception Classes (app/common/exceptions/base.py)
-
-| Class | Status Code |
-|---|---|
-| NotFoundError | 404 |
-| BadRequestError | 400 |
-| UnauthorizedError | 401 |
-| ForbiddenError | 403 |
-| ConflictError | 409 |
-
 ## Health Endpoints
 
 | Method | URL | Description |
 |---|---|---|
-| GET | /v1/health | App liveness check |
-| GET | /v1/db-health | Database connectivity check |
-
-GET /v1/health response:
-```json
-{"status": "healthy"}
-```
-
-GET /v1/db-health success:
-```json
-{"status": "healthy", "database": "connected"}
-```
-
-GET /v1/db-health failure:
-```json
-{"status": "unhealthy", "database": "disconnected", "error": "..."}
-```
-
-## Swagger / OpenAPI
-
-Auto-generated by FastAPI:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-## Common Shared Components
-
-### responses/base.py
-```python
-SuccessResponse[T]    # success, message, data
-ErrorResponse         # success=False, message, detail, status_code
-```
-
-### schemas/pagination.py
-```python
-PaginationParams      # page, page_size, offset property
-PaginatedResponse[T]  # items, total, page, page_size, pages
-```
-
-### constants/app.py
-```python
-DEFAULT_PAGE_SIZE = 20
-MAX_PAGE_SIZE = 100
-DATE_FORMAT = "%Y-%m-%d"
-DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-```
-
-### enums/base.py
-```python
-Environment   # development, staging, production, dr
-Status        # active, inactive, deleted
-```
-
-### utils/datetime.py
-```python
-utcnow()              # current UTC datetime
-utcnow_iso()          # current UTC as ISO string
-format_datetime(dt)   # format datetime to string
-```
-
-### utils/uuid.py
-```python
-generate_uuid()       # new UUID4 string
-is_valid_uuid(value)  # validate UUID string
-```
-
-### validators/common.py
-```python
-is_valid_email(email)        # regex email validation
-is_non_empty_string(value)   # non-blank string check
-```
+| GET | /v1/health | App liveness |
+| GET | /v1/db-health | DB connectivity |
 
 ---
 
 # Phase 2 — Database Foundation ✅
 
-## Status
-
 | Task | Status |
 |---|---|
 | PostgreSQL connection | ✅ |
 | SQLAlchemy async engine | ✅ |
-| Alembic setup | ✅ |
+| Alembic setup + versions folder | ✅ |
 | Database session dependency | ✅ |
 | Base model | ✅ |
 | DB Health API | ✅ |
 
-## PostgreSQL Setup
-
-1. Create database in pgAdmin or psql:
-```sql
-CREATE DATABASE incident_ai;
-```
-
-2. Update `.env` with credentials:
-```
-DATABASE_URL=postgresql+asyncpg://postgres:yourpassword@localhost:5432/incident_ai
-```
-
-## SQLAlchemy Base (app/database/postgres/base.py)
-
-All future models inherit from `Base`:
-```python
-from app.database.postgres.base import Base
-
-class MyModel(Base):
-    __tablename__ = "my_table"
-    ...
-```
-
-## Async Session (app/database/postgres/session.py)
-
-- Creates async engine from DATABASE_URL
-- `echo=DEBUG` prints SQL in development
-- `expire_on_commit=False` keeps objects accessible after commit
-- `get_db()` is a FastAPI dependency yielding one session per request
-
-Usage:
-```python
-@router.get("/example")
-async def example(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(MyModel))
-```
-
-## Alembic Migrations
-
-Configuration in `alembic.ini` + `alembic/env.py`.
-`env.py` reads DATABASE_URL from settings automatically.
-Add new model imports to `env.py` before generating migrations.
-
 ```bash
-# Generate migration after adding/changing models
 alembic revision --autogenerate -m "description"
-
-# Apply all pending migrations
 alembic upgrade head
-
-# Rollback one step
-alembic downgrade -1
-
-# View migration history
-alembic history
 ```
 
 ---
 
 # Phase 2 — Incident Module ✅
 
-## Architecture Flow
-
+## Architecture
 ```
-HTTP Request
-    ↓
-api/v1/incidents.py    (HTTP routing only, no logic)
-    ↓
-modules/incidents/service.py    (business logic, validation, error handling)
-    ↓
-modules/incidents/repository.py    (SQL queries only)
-    ↓
-PostgreSQL (incidents table)
+API → Service → Repository → PostgreSQL
 ```
 
-## Enums (modules/incidents/enums.py)
-
-Values are string-compatible with ServiceNow field values for future integration.
-
-| Enum | Values |
+## Files
+| File | Purpose |
 |---|---|
-| IncidentPriority | 1 (Critical), 2 (High), 3 (Medium), 4 (Low) |
-| IncidentState | new, in_progress, on_hold, resolved, closed, cancelled |
-| IncidentCategory | network, hardware, software, database, security, access, email, vpn, application, other |
-| IncidentImpact | 1 (High), 2 (Medium), 3 (Low) |
-| IncidentUrgency | 1 (High), 2 (Medium), 3 (Low) |
-| IncidentEnvironment | production, staging, development, dr |
-| IncidentSource | manual, monitoring, email, phone, self_service, api |
+| enums.py | Priority, State, Category, Impact, Urgency, Environment, Source |
+| model.py | SQLAlchemy Incident model (incidents table) |
+| schemas.py | IncidentCreate, IncidentUpdate, IncidentResponse, IncidentListResponse |
+| repository.py | DB-only: create, get, list, update, delete, search |
+| service.py | Business logic, validation, error handling |
 
-## Database Model (modules/incidents/model.py)
+## REST Endpoints
 
-Table: `incidents`
-
-| Column | Type | Notes |
+| Method | URL | Description |
 |---|---|---|
-| id | String(36) | UUID primary key |
-| incident_number | String(20) | Unique, indexed e.g. INC0000001 |
-| short_description | String(255) | Required |
-| description | Text | Optional |
-| priority | Enum | Default: MEDIUM |
-| state | Enum | Default: NEW |
-| category | Enum | Optional |
-| subcategory | String(100) | Optional |
-| impact | Enum | Default: MEDIUM |
-| urgency | Enum | Default: MEDIUM |
-| assignment_group | String(100) | Optional |
-| assigned_to | String(100) | Optional |
-| caller | String(100) | Optional |
-| configuration_item | String(100) | CMDB reference |
-| business_service | String(100) | CMDB reference |
-| environment | Enum | Optional |
-| source | Enum | Default: MANUAL |
-| work_notes | Text | Optional |
-| comments | Text | Optional |
-| created_at | DateTime(tz) | Auto-set on create |
-| updated_at | DateTime(tz) | Auto-set on create + update |
+| POST | /v1/incidents | Create incident (201) |
+| GET | /v1/incidents | List with pagination + filters |
+| GET | /v1/incidents/search | Keyword search |
+| GET | /v1/incidents/{id} | Get by ID |
+| PUT | /v1/incidents/{id} | Update |
+| DELETE | /v1/incidents/{id} | Delete (204) |
 
-## Pydantic Schemas (modules/incidents/schemas.py)
+### List Query Params
+`page`, `page_size`, `priority`, `state`, `category`, `assignment_group`, `sort_by`, `sort_order`
 
-| Schema | Purpose |
-|---|---|
-| IncidentCreate | POST request body — only short_description required |
-| IncidentUpdate | PUT request body — all fields optional |
-| IncidentResponse | Single incident API response |
-| IncidentListResponse | Paginated list response with metadata |
+### Search Query Params
+`q` (min 2 chars), `page`, `page_size`, `priority`, `state`, `category`, `assignment_group`
 
-`use_enum_values=True` — serialises enums as strings in Create/Update.
-`from_attributes=True` — allows building IncidentResponse from SQLAlchemy model.
-
-## Repository Layer (modules/incidents/repository.py)
-
-No business logic. Only database operations.
-
-| Method | Description |
-|---|---|
-| create(data) | Insert incident, auto-generate incident_number |
-| get_by_id(id) | Fetch by primary key |
-| get_by_number(number) | Fetch by INC number |
-| get_all(...) | Paginated, filtered, sorted list |
-| update(id, data) | Partial update, auto-sets updated_at |
-| delete(id) | Hard delete, returns bool |
-| search(query, ...) | ilike search across 5 fields with optional filters |
-
-To replace PostgreSQL with ServiceNow: create `ServiceNowIncidentRepository`
-with the same method signatures and swap via dependency injection.
-
-## Service Layer (modules/incidents/service.py)
-
-Business logic only. No SQL queries.
-
-| Method | Business Rules |
-|---|---|
-| create_incident | Calls repo.create, logs creation |
-| get_incident | Raises NotFoundError if not found |
-| list_incidents | Converts page to offset, calculates total pages |
-| update_incident | Raises NotFoundError if not found, skips if no fields provided |
-| delete_incident | Raises NotFoundError before deleting |
-| search_incidents | Validates min 2 char query, raises BadRequestError |
-
-## REST API Endpoints (api/v1/incidents.py)
-
-Base path: `/v1/incidents`
-
-| Method | Path | Description | Status |
-|---|---|---|---|
-| POST | /v1/incidents | Create incident | 201 |
-| GET | /v1/incidents | List incidents | 200 |
-| GET | /v1/incidents/search | Search incidents | 200 |
-| GET | /v1/incidents/{id} | Get by ID | 200 |
-| PUT | /v1/incidents/{id} | Update incident | 200 |
-| DELETE | /v1/incidents/{id} | Delete incident | 204 |
-
-> /search is declared before /{id} to prevent FastAPI matching "search" as a path parameter.
-
-### GET /v1/incidents — Query Parameters
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| page | int | 1 | Page number |
-| page_size | int | 20 | Results per page (max 100) |
-| priority | str | null | Filter by priority |
-| state | str | null | Filter by state |
-| category | str | null | Filter by category |
-| assignment_group | str | null | Filter by assignment group |
-| sort_by | str | created_at | Sort field |
-| sort_order | str | desc | asc or desc |
-
-### GET /v1/incidents/search — Query Parameters
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| q | str | yes (min 2 chars) | Search keyword |
-| page | int | no | Page number |
-| page_size | int | no | Results per page |
-| priority | str | no | Filter by priority |
-| state | str | no | Filter by state |
-| category | str | no | Filter by category |
-| assignment_group | str | no | Filter by group |
-
-Searches across: incident_number, short_description, description, caller, assigned_to.
-
-### Error Responses
-
-| Scenario | Status | Body |
-|---|---|---|
-| Incident not found | 404 | `{"detail": "...", "status_code": 404}` |
-| Validation error | 422 | `{"detail": [...errors], "status_code": 422}` |
-| Search query too short | 400 | `{"detail": "...", "status_code": 400}` |
-| Unhandled error | 500 | `{"detail": "Internal server error", "status_code": 500}` |
-
-## Seed Data (scripts/seed_incidents.py)
-
-Inserts 100 realistic incidents into PostgreSQL.
-
-Run from `backend/` with venv activated:
+## Seed Data
 ```bash
-python scripts/seed_incidents.py
+python scripts/seed_incidents.py   # inserts 100 realistic incidents
 ```
 
-Covers categories: email, VPN, database, application, network, hardware, security, access, software.
-Randomises: priority, state, impact, urgency, environment, source, assignment groups, callers, dates (0–90 days ago).
-
-## Database Migration
-
-Migration file: `alembic/versions/78b5282e58c6_create_incidents_table.py`
-
+## Tests
 ```bash
-# Apply migration (creates incidents table)
-alembic upgrade head
+pytest app/tests/unit/   # 9 unit tests (service layer with mocks)
+pytest app/tests/api/    # 14 integration tests (full HTTP via SQLite)
+pytest                   # all 23
 ```
 
 ---
 
-# Testing
+# Phase 3 — Shift Roster Module ✅
 
-## Test Infrastructure
+## Objective
+Store and query monthly/weekly engineer shift schedules uploaded via Excel (.xlsx) or CSV.
+Provides the Triage Agent with engineer availability data.
 
-- In-memory SQLite via `aiosqlite` — no PostgreSQL needed for tests
-- `conftest.py` creates schema from models and overrides `get_db` dependency
-- Tests are isolated per test function via fresh session
-
-## Running Tests
-
-```bash
-# All tests
-pytest
-
-# Unit tests only
-pytest app/tests/unit/ -v
-
-# API integration tests only
-pytest app/tests/api/ -v
-
-# With output
-pytest -v -s
+## Source Data (Excel format)
+```
+Sheet: Roster
+Columns: Assignment Group | Assigned To | Email | Shift | 2026-07-01 to 2026-07-31 | Level | 1 | 2 | ... | 31
+Values:  Shift1 | Shift2 | Shift3 | WO | PL | CH | RH
 ```
 
-## Test Coverage
+## Shift Code Definitions (constant in enums.py)
 
-### Unit Tests (app/tests/unit/test_incident_service.py) — 9 tests
+| Code | Label | Timing | Working |
+|---|---|---|---|
+| Shift1 | Shift 1 | 12:30 PM IST - 09:30 PM IST | ✅ |
+| Shift2 | Shift 2 | 10:00 AM IST - 07:30 PM IST | ✅ |
+| Shift3 | Shift 3 | 08:00 AM EST - 05:00 PM EST | ✅ |
+| WO | Week Off | — | ❌ |
+| PL | Planned Leave | — | ❌ |
+| CH | Company Holiday | — | ❌ |
+| RH | Restricted Holiday | — | ❌ |
 
-| Test | Covers |
+Import in code:
+```python
+from app.modules.shift_roster.enums import SHIFT_DEFINITIONS, WORKING_SHIFTS, NON_WORKING_CODES
+```
+
+## Normalized Database Design (4 tables)
+
+```
+shift_roster_uploads  ──► shift_roster ◄── engineers
+                                │
+                                ▼
+                      shift_roster_history
+```
+
+### Table 1: shift_roster_uploads
+Metadata for every uploaded file.
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID | PK |
+| file_name | String | uploaded filename |
+| roster_start_date | Date | from Excel header |
+| roster_end_date | Date | from Excel header |
+| uploaded_by | String | optional |
+| uploaded_at | DateTime | auto |
+| total_records | Int | rows in file |
+| imported_records | Int | successfully saved |
+| failed_records | Int | skipped rows |
+| upload_status | Enum | success / partial / failed |
+
+### Table 2: engineers
+Master engineer records. Email is unique — used for deduplication.
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID | PK |
+| assignment_group | String | indexed |
+| assigned_to | String | indexed |
+| email | String | unique, indexed |
+| default_shift | String | from Excel |
+| level | Enum | L1/L2/L3, indexed |
+| status | Enum | active/inactive, indexed |
+| created_at / updated_at | DateTime | auto |
+
+### Table 3: shift_roster
+One row per engineer per day — normalized from Day1..Day31.
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID | PK |
+| upload_id | FK | → shift_roster_uploads |
+| engineer_id | FK | → engineers |
+| roster_date | Date | indexed |
+| shift_code | Enum | Shift1/WO/PL etc., indexed |
+| created_at / updated_at | DateTime | auto |
+
+### Table 4: shift_roster_history
+Audit trail for post-upload changes.
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID | PK |
+| roster_id | FK | → shift_roster |
+| engineer_id | FK | → engineers |
+| roster_date | Date | |
+| previous_shift | Enum | |
+| new_shift | Enum | |
+| changed_by | String | optional |
+| changed_at | DateTime | auto |
+| reason | Text | optional |
+
+## Import Process
+
+```
+Upload file (.xlsx / .csv)
+    ↓
+Validate file type + sheet name
+    ↓
+Parse rows → extract engineer + daily shifts
+    ↓
+For each engineer:
+    Email exists? → Update master record
+    Email new?   → Insert new engineer
+    ↓
+Delete existing roster for same date range
+    ↓
+Convert Day1..Day31 → daily shift_roster rows
+    ↓
+Bulk insert + commit
+    ↓
+Update upload summary (imported / failed / status)
+```
+
+## Files
+
+| File | Purpose |
 |---|---|
-| test_create_incident | Service creates and returns incident |
-| test_get_incident_not_found | Raises NotFoundError |
-| test_get_incident_found | Returns IncidentResponse |
-| test_update_incident_not_found | Raises NotFoundError |
-| test_update_incident_success | Updates and returns updated incident |
-| test_delete_incident_not_found | Raises NotFoundError |
-| test_delete_incident_success | Calls repo.delete |
-| test_search_short_query | Raises BadRequestError for < 2 chars |
-| test_list_incidents | Returns IncidentListResponse |
+| enums.py | ShiftCode, EngineerLevel, EngineerStatus, UploadStatus, SHIFT_DEFINITIONS |
+| model.py | 4 SQLAlchemy models |
+| schemas.py | UploadSummary, EngineerResponse, EngineerUpdate, ShiftRosterResponse, ShiftRosterUpdate, EngineerAvailability, RosterHistoryResponse |
+| parser.py | parse_excel() + parse_csv() → ParsedRoster |
+| repository.py | All DB operations — no business logic |
+| service.py | Business logic — no SQL queries |
 
-### API Integration Tests (app/tests/api/test_incidents_api.py) — 14 tests
+## REST Endpoints
 
-| Test | Covers |
+| Method | URL | Description |
+|---|---|---|
+| POST | /v1/shift-roster/upload | Upload .xlsx or .csv file |
+| GET | /v1/shift-roster/uploads | Upload history |
+| GET | /v1/shift-roster/available | Triage Agent — engineers on a date |
+| GET | /v1/shift-roster/search | Search engineers with optional date |
+| PUT | /v1/shift-roster/roster/{roster_id} | Update daily entry + log history |
+| GET | /v1/shift-roster/engineer/{email} | Engineer details |
+| PUT | /v1/shift-roster/engineer/{email} | Update engineer |
+| DELETE | /v1/shift-roster/engineer/{email} | Mark inactive |
+| GET | /v1/shift-roster/engineer/{email}/roster | Roster for date range |
+| GET | /v1/shift-roster/engineer/{email}/history | Change audit trail |
+
+### GET /v1/shift-roster/available
+Required: `roster_date`
+Optional: `shift_code`, `assignment_group`, `level`
+
+### GET /v1/shift-roster/search
+Optional: `assignment_group`, `level`, `name`, `email`, `status`, `roster_date`, `shift_code`
+
+Without `roster_date` → returns engineer info only
+With `roster_date` → returns engineer + their shift on that day
+
+## Triage Agent Integration
+
+The `/available` and `/search` endpoints are the primary interfaces for the Triage Agent:
+
+```python
+# Who is working Shift1 in Database team today?
+GET /v1/shift-roster/available?roster_date=2026-07-15&shift_code=Shift1&assignment_group=Database
+
+# Who is on leave today?
+GET /v1/shift-roster/available?roster_date=2026-07-15&shift_code=PL
+
+# All L2 engineers and their shift today
+GET /v1/shift-roster/search?level=L2&roster_date=2026-07-15
+```
+
+---
+
+# Running the Application
+
+```bash
+# Activate venv
+venv\Scripts\activate
+
+# Install dependencies
+pip install -e .
+
+# Apply all migrations
+alembic upgrade head
+
+# Seed incidents
+python scripts/seed_incidents.py
+
+# Run server
+uvicorn app.main:app --reload
+```
+
+| URL | Purpose |
 |---|---|
-| test_create_incident | POST returns 201, incident_number set |
-| test_create_incident_validation_error | short_description < 5 chars → 422 |
-| test_create_incident_missing_required | Missing short_description → 422 |
-| test_get_incident | GET by ID returns correct incident |
-| test_get_incident_not_found | Unknown ID → 404 |
-| test_list_incidents | GET returns items and total |
-| test_list_incidents_pagination | page_size limits results |
-| test_list_incidents_filter_by_state | state filter applied correctly |
-| test_update_incident | PUT updates state |
-| test_update_incident_not_found | Unknown ID → 404 |
-| test_delete_incident | DELETE returns 204, GET returns 404 |
-| test_delete_incident_not_found | Unknown ID → 404 |
-| test_search_incidents | q matches short_description |
-| test_search_incidents_short_query | q=1 char → 422 |
-
-Total: 23 tests, all passing.
+| http://localhost:8000/v1/health | App health |
+| http://localhost:8000/v1/db-health | DB health |
+| http://localhost:8000/v1/incidents | Incident list |
+| http://localhost:8000/v1/shift-roster/search | Engineer search |
+| http://localhost:8000/v1/shift-roster/available | Triage availability |
+| http://localhost:8000/docs | Swagger UI |
+| http://localhost:8000/redoc | ReDoc |
 
 ---
 
 # Not Yet Implemented (Future Phases)
 
-| Phase | Module | Description |
-|---|---|---|
-| 3 | Authentication | JWT, users, roles |
-| 3 | Users module | User management |
-| 4 | AI Platform | LLM integration |
-| 4 | Agents — Triage | Auto-triage incidents |
-| 4 | Agents — Acknowledgement | Auto-acknowledge |
-| 4 | Agents — Pending | Handle pending state |
-| 4 | Agents — Resolution | Auto-resolve |
-| 4 | Orchestrator | Coordinate agents |
-| 5 | ServiceNow Integration | Replace repository layer |
-| 5 | Knowledge module | Knowledge base |
-| 5 | Analytics module | Dashboards, metrics |
-| 5 | Audit module | Audit trail |
-| 6 | Platform — Events | Event bus |
-| 6 | Platform — Messaging | Message queue |
-| 6 | Platform — Caching | Redis cache |
-| 6 | Platform — Scheduler | Job scheduler |
-| 6 | Platform — Telemetry | Observability |
-| 6 | Background Workers | Async job processing |
-
----
-
-# Running URLs
-
-| URL | Purpose |
+| Phase | Module |
 |---|---|
-| http://localhost:8000/v1/health | App health check |
-| http://localhost:8000/v1/db-health | Database health check |
-| http://localhost:8000/v1/incidents | Incident list |
-| http://localhost:8000/v1/incidents/search?q=vpn | Search incidents |
-| http://localhost:8000/docs | Swagger UI |
-| http://localhost:8000/redoc | ReDoc |
+| 4 | Authentication / JWT |
+| 4 | Users module |
+| 5 | AI Platform / LLM integration |
+| 5 | Agents: Triage, Acknowledgement, Pending, Resolution |
+| 5 | Orchestrator |
+| 6 | ServiceNow integration (swap repository layer) |
+| 6 | Knowledge base |
+| 6 | Analytics / Audit |
+| 7 | Platform: Events, Messaging, Caching, Scheduler, Telemetry |
+| 7 | Background Workers |
