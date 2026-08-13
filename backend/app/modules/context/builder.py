@@ -18,6 +18,7 @@ from app.modules.context.exceptions import ContextBuildError
 from app.modules.incidents.schemas import IncidentResponse
 from app.modules.shift_roster.schemas import EngineerAvailability
 from app.modules.shift_roster.enums import WORKING_SHIFTS
+from app.modules.shift_roster.shift_time_checker import is_shift_active_now
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 def build_engineer_context(eng: EngineerAvailability) -> EngineerContext:
     """Convert an EngineerAvailability record into an EngineerContext."""
     is_available = eng.shift_code in WORKING_SHIFTS if eng.shift_code else False
+    is_active = is_shift_active_now(eng.shift_code) if is_available else False
     return EngineerContext(
         engineer_id=eng.engineer_id,
         name=eng.assigned_to,
@@ -34,6 +36,7 @@ def build_engineer_context(eng: EngineerAvailability) -> EngineerContext:
         default_shift=eng.default_shift,
         current_shift=eng.shift_code,
         is_available=is_available,
+        is_shift_active=is_active,
         roster_date=eng.roster_date,
     )
 

@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.database.postgres.base import Base
 import app.modules.incidents.model  # noqa: F401
 import app.modules.shift_roster.model  # noqa: F401
+import app.modules.agents.triage.models  # noqa: F401
 
 # this is the Alembic Config object
 config = context.config

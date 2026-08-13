@@ -41,10 +41,15 @@ class IncidentService:
 
     async def get_incident(self, incident_id: str) -> IncidentResponse:
         """
-        Fetch a single incident by ID.
+        Fetch a single incident by ID or incident number (INC0000001).
         Raises NotFoundError if the incident does not exist.
         """
-        incident = await self.repo.get_by_id(incident_id)
+        # Detect if input is an incident number (INCxxxxxxx) or UUID
+        if incident_id.upper().startswith("INC"):
+            incident = await self.repo.get_by_number(incident_id.upper())
+        else:
+            incident = await self.repo.get_by_id(incident_id)
+
         if not incident:
             logger.warning(f"Incident not found: {incident_id}")
             raise NotFoundError(f"Incident '{incident_id}' not found")

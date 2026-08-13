@@ -36,6 +36,7 @@ class EngineerContext(BaseModel):
     default_shift: str | None
     current_shift: str | None  # shift code on the context date (Shift1/WO/PL etc.)
     is_available: bool         # True if on a working shift
+    is_shift_active: bool      # True if the working shift is currently active (time window)
     roster_date: date | None
 
 
