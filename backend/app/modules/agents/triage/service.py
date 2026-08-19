@@ -93,15 +93,17 @@ class TriageService:
         incident_id: str,
         context_date: date | None = None,
         apply_recommendation: bool = True,
+        force: bool = False,
     ) -> AgentResponse:
         """
         Full triage flow.
-        Only runs for incidents in state 'new' or 'in_progress' with no assigned_to.
+        By default only runs for incidents with no assigned_to.
+        Pass force=True to re-assign even if an engineer is already set.
         """
         if context_date is None:
             context_date = datetime.now(timezone.utc).date()
 
-        # Guard: only triage new or in_progress unassigned incidents
+        # Guard: only triage new or in_progress incidents
         incident = await self.incident_service.get_incident(incident_id)
         if incident.state not in ("new", "in_progress"):
             return AgentResponse(
@@ -110,7 +112,7 @@ class TriageService:
                 reasoning=f"Incident is in state '{incident.state}' — triage only runs for new or in_progress incidents",
                 errors=[f"Invalid state for triage: {incident.state}"],
             )
-        if incident.assigned_to:
+        if incident.assigned_to and not force:
             return AgentResponse(
                 success=False,
                 agent_name="TriageAgent",

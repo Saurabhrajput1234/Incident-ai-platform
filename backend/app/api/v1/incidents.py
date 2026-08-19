@@ -1,3 +1,5 @@
+
+
 """
 Incident REST API endpoints.
 
@@ -119,10 +121,29 @@ async def get_incident(
 async def update_incident(
     incident_id: str,
     payload: IncidentUpdate,
+    background_tasks: BackgroundTasks,
     service: IncidentService = Depends(get_service),
 ):
-    """Update an existing incident. Only provided fields are updated."""
-    return await service.update_incident(incident_id, payload)
+    """
+    Update an existing incident.
+    If assigned_to is explicitly cleared (set to empty string or null),
+    auto-triggers the Triage Agent to re-assign.
+    """
+    # Detect if assigned_to was explicitly cleared in this request
+    # model_fields_set only contains fields the caller actually sent
+    assigned_to_cleared = (
+        'assigned_to' in payload.model_fields_set
+        and payload.assigned_to in (None, '')
+    )
+
+    updated = await service.update_incident(incident_id, payload)
+
+    # Re-triage if engineer was unassigned and state allows it
+    if assigned_to_cleared and updated.state in ('new', 'in_progress'):
+        logger.info(f"assigned_to cleared on {incident_id} — triggering re-triage")
+        background_tasks.add_task(_auto_triage, incident_id)
+
+    return updated
 
 
 @router.delete("/{incident_id}", status_code=status.HTTP_204_NO_CONTENT)
