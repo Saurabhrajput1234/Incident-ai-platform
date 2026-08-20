@@ -6,7 +6,7 @@ migration issues. Values are validated at the Pydantic/service layer.
 """
 import uuid
 from datetime import datetime, date, timezone
-from sqlalchemy import String, DateTime, Date, ForeignKey, Text, Integer
+from sqlalchemy import String, DateTime, Date, ForeignKey, Text, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.postgres.base import Base
 
@@ -33,11 +33,14 @@ class ShiftRosterUpload(Base):
 
 class Engineer(Base):
     __tablename__ = "engineers"
+    __table_args__ = (
+        UniqueConstraint("email", "assignment_group", name="uq_engineer_email_group"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     assignment_group: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     assigned_to: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    email: Mapped[str] = mapped_column(String(150), nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(150), nullable=False, index=True)  # no longer unique alone
     default_shift: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # "L1" | "L2" | "L3"
     level: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)

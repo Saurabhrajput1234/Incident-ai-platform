@@ -17,7 +17,10 @@ const ASSIGNMENT_GROUPS = [
   'Hardware Support','Virtualization Support','Email Support',
   'Telecom Support','Endpoint Support',
   // Common queue
-  'IT Service Desk','IT Helpdesk','General IT Support','L1 Support',
+  'IT Service Desk','IT Helpdesk','General IT Support','L1 Support', "Enterprise Support",
+    'General Support',
+    'Technical Support',
+    'Service Operations',
 ]
 
 function Field({ label, required, children, hint }) {

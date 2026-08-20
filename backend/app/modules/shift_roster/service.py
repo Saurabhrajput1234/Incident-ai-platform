@@ -70,11 +70,11 @@ class ShiftRosterService:
 
         for row in parsed.rows:
             try:
-                # Upsert engineer
-                existing = await self.repo.get_engineer_by_email(row.email)
+                # Upsert by (email, assignment_group) — an engineer can belong to
+                # multiple groups; each (email, group) pair is a distinct record
+                existing = await self.repo.get_engineer_by_email_and_group(row.email, row.assignment_group)
                 if existing:
                     await self.repo.update_engineer(existing.id, {
-                        "assignment_group": row.assignment_group,
                         "assigned_to": row.assigned_to,
                         "default_shift": row.default_shift,
                         "level": row.level,
@@ -92,7 +92,7 @@ class ShiftRosterService:
                     })
                     engineer_id = engineer.id
 
-                # Replace existing roster records for this date range
+                # Replace only this engineer+group's roster for this date range
                 await self.repo.delete_roster_by_date_range(
                     engineer_id,
                     parsed.roster_start_date,
@@ -228,28 +228,37 @@ class ShiftRosterService:
         )
         return [EngineerResponse.model_validate(e) for e in engineers]
 
+    async def get_engineers_by_email(self, email: str, assignment_group: str | None = None) -> list[EngineerResponse]:
+        """Return all engineer records for an email, optionally filtered by group."""
+        engineers = await self.repo.get_engineers_by_email(email, assignment_group)
+        if not engineers:
+            raise NotFoundError(f"Engineer with email '{email}' not found")
+        return [EngineerResponse.model_validate(e) for e in engineers]
+
     async def get_engineer(self, email: str) -> EngineerResponse:
+        """Return first engineer record for email (backwards compat)."""
         engineer = await self.repo.get_engineer_by_email(email)
         if not engineer:
             raise NotFoundError(f"Engineer with email '{email}' not found")
         return EngineerResponse.model_validate(engineer)
 
-    async def update_engineer(self, email: str, payload) -> EngineerResponse:
-        existing = await self.repo.get_engineer_by_email(email)
+    async def update_engineer(self, email: str, assignment_group: str, payload) -> EngineerResponse:
+        existing = await self.repo.get_engineer_by_email_and_group(email, assignment_group)
         if not existing:
-            raise NotFoundError(f"Engineer with email '{email}' not found")
+            raise NotFoundError(f"Engineer '{email}' in group '{assignment_group}' not found")
         updated = await self.repo.update_engineer(existing.id, payload.model_dump(exclude_none=True))
         await self.repo.commit()
         return EngineerResponse.model_validate(updated)
 
-    async def delete_engineer(self, email: str) -> None:
-        """Mark engineer as inactive — does not delete historical data."""
-        existing = await self.repo.get_engineer_by_email(email)
-        if not existing:
+    async def delete_engineer(self, email: str, assignment_group: str | None = None) -> None:
+        """Mark engineer(s) as inactive. If group given, only that record; else all records for email."""
+        engineers = await self.repo.get_engineers_by_email(email, assignment_group)
+        if not engineers:
             raise NotFoundError(f"Engineer with email '{email}' not found")
-        await self.repo.update_engineer(existing.id, {"status": EngineerStatus.INACTIVE})
+        for eng in engineers:
+            await self.repo.update_engineer(eng.id, {"status": EngineerStatus.INACTIVE})
         await self.repo.commit()
-        logger.info(f"Engineer marked inactive: {existing.assigned_to}")
+        logger.info(f"Engineer(s) marked inactive: {email} (group={assignment_group or 'all'})")
 
     async def get_available_engineers(
         self,
@@ -286,13 +295,24 @@ class ShiftRosterService:
         return result
 
     async def get_engineer_roster(
-        self, email: str, start: date, end: date
+        self, email: str, start: date, end: date, assignment_group: str | None = None
     ) -> list[ShiftRosterResponse]:
-        engineer = await self.repo.get_engineer_by_email(email)
-        if not engineer:
+        engineers = await self.repo.get_engineers_by_email(email, assignment_group)
+        if not engineers:
             raise NotFoundError(f"Engineer with email '{email}' not found")
-        records = await self.repo.get_roster_by_engineer(engineer.id, start, end)
+        records = []
+        for eng in engineers:
+            records.extend(await self.repo.get_roster_by_engineer(eng.id, start, end))
         return [ShiftRosterResponse.model_validate(r) for r in records]
+
+    async def get_engineer_change_history(self, email: str, assignment_group: str | None = None) -> list[RosterHistoryResponse]:
+        engineers = await self.repo.get_engineers_by_email(email, assignment_group)
+        if not engineers:
+            raise NotFoundError(f"Engineer with email '{email}' not found")
+        records = []
+        for eng in engineers:
+            records.extend(await self.repo.get_history_by_engineer(eng.id))
+        return [RosterHistoryResponse.model_validate(r) for r in records]
 
     async def update_roster_entry(
         self, roster_id: str, payload: ShiftRosterUpdate
@@ -321,10 +341,3 @@ class ShiftRosterService:
 
     async def get_upload_history(self):
         return await self.repo.get_uploads()
-
-    async def get_engineer_change_history(self, email: str) -> list[RosterHistoryResponse]:
-        engineer = await self.repo.get_engineer_by_email(email)
-        if not engineer:
-            raise NotFoundError(f"Engineer with email '{email}' not found")
-        records = await self.repo.get_history_by_engineer(engineer.id)
-        return [RosterHistoryResponse.model_validate(r) for r in records]

@@ -42,8 +42,30 @@ class ShiftRosterRepository:
     # -------------------------------------------------------------------------
 
     async def get_engineer_by_email(self, email: str) -> Engineer | None:
+        """Returns first match by email (for backwards-compat lookups without group)."""
         result = await self.db.execute(
             select(Engineer).where(Engineer.email == email.lower())
+        )
+        return result.scalars().first()
+
+    async def get_engineers_by_email(self, email: str, assignment_group: str | None = None) -> list[Engineer]:
+        """Returns all engineer records for an email, optionally filtered by assignment group."""
+        query = select(Engineer).where(Engineer.email == email.lower())
+        if assignment_group:
+            query = query.where(Engineer.assignment_group == assignment_group)
+        query = query.order_by(Engineer.assignment_group)
+        result = await self.db.execute(query)
+        return result.scalars().all()
+
+    async def get_engineer_by_email_and_group(self, email: str, assignment_group: str) -> Engineer | None:
+        """Primary upsert key — unique per (email, assignment_group)."""
+        result = await self.db.execute(
+            select(Engineer).where(
+                and_(
+                    Engineer.email == email.lower(),
+                    Engineer.assignment_group == assignment_group,
+                )
+            )
         )
         return result.scalar_one_or_none()
 

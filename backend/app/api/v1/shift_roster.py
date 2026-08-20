@@ -131,32 +131,35 @@ async def update_roster_entry(
 
 # --- Engineer CRUD ---
 
-@router.get("/engineer/{email}", response_model=EngineerResponse)
+@router.get("/engineer/{email}", response_model=list[EngineerResponse])
 async def get_engineer(
     email: str,
+    assignment_group: str | None = Query(default=None, description="Filter by assignment group"),
     service: ShiftRosterService = Depends(get_service),
 ):
-    """Get engineer details by email."""
-    return await service.get_engineer(email)
+    """Get engineer records by email. Returns all groups unless assignment_group is specified."""
+    return await service.get_engineers_by_email(email, assignment_group)
 
 
 @router.put("/engineer/{email}", response_model=EngineerResponse)
 async def update_engineer(
     email: str,
     payload: EngineerUpdate,
+    assignment_group: str = Query(..., description="Assignment group to identify which record to update"),
     service: ShiftRosterService = Depends(get_service),
 ):
-    """Update engineer master record."""
-    return await service.update_engineer(email, payload)
+    """Update engineer master record for a specific (email, assignment_group) pair."""
+    return await service.update_engineer(email, assignment_group, payload)
 
 
 @router.delete("/engineer/{email}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_engineer(
     email: str,
+    assignment_group: str | None = Query(default=None, description="If omitted, marks all records for this email inactive"),
     service: ShiftRosterService = Depends(get_service),
 ):
-    """Mark engineer as inactive. Historical data is preserved."""
-    await service.delete_engineer(email)
+    """Mark engineer as inactive. If assignment_group is provided, only that record is affected."""
+    await service.delete_engineer(email, assignment_group)
 
 
 @router.get("/engineer/{email}/roster", response_model=list[ShiftRosterResponse])
@@ -164,16 +167,18 @@ async def get_engineer_roster(
     email: str,
     start: date = Query(..., description="Start date YYYY-MM-DD"),
     end: date = Query(..., description="End date YYYY-MM-DD"),
+    assignment_group: str | None = Query(default=None, description="Filter by assignment group"),
     service: ShiftRosterService = Depends(get_service),
 ):
     """Get an engineer's complete roster for a date range."""
-    return await service.get_engineer_roster(email, start, end)
+    return await service.get_engineer_roster(email, start, end, assignment_group)
 
 
 @router.get("/engineer/{email}/history", response_model=list[RosterHistoryResponse])
 async def get_engineer_history(
     email: str,
+    assignment_group: str | None = Query(default=None, description="Filter by assignment group"),
     service: ShiftRosterService = Depends(get_service),
 ):
     """View all roster change history for an engineer."""
-    return await service.get_engineer_change_history(email)
+    return await service.get_engineer_change_history(email, assignment_group)
