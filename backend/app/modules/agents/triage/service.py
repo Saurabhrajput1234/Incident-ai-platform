@@ -44,12 +44,17 @@ class TriageService:
     async def _resolve_assignment_group(self, incident_id: str) -> tuple[str | None, bool]:
         """
         Returns (assignment_group, llm_was_used).
-        Uses LLM only when group is missing or is a common queue group.
+
+        Step 1: If group is already a specific (non-common-queue) group, use it as-is.
+        Step 2: Otherwise use LLM to resolve from the full ASSIGNMENT_GROUPS list.
+                Always uses the hardcoded list so resolution works even before any
+                roster is uploaded. The DB group list is only used to enrich if available.
+        Step 3: Persist the resolved group onto the incident immediately.
         """
         incident = await self.incident_service.get_incident(incident_id)
 
         if incident.assignment_group and not is_common_queue(incident.assignment_group):
-            logger.info(f"Assignment group already set: '{incident.assignment_group}'")
+            logger.info(f"Assignment group already set to specific group: '{incident.assignment_group}'")
             return incident.assignment_group, False
 
         logger.info(
@@ -57,24 +62,35 @@ class TriageService:
             f"(current: '{incident.assignment_group}')"
         )
 
+        # Always resolve from the hardcoded ASSIGNMENT_GROUPS list only
+        # No DB dependency — roster upload state does not affect group resolution
+        available_groups = ASSIGNMENT_GROUPS
+        logger.info(f"Available groups for LLM resolution: {available_groups}")
+
         messages = build_assignment_group_messages(
             short_description=incident.short_description,
             description=incident.description,
             work_notes=incident.work_notes,
-            available_groups=ASSIGNMENT_GROUPS,
+            available_groups=available_groups,
         )
 
         try:
             raw = await self.llm.complete(messages=messages)
             resolved = raw.strip().strip(".,!? \"'")
+            logger.info(f"LLM raw response: '{raw}' → stripped: '{resolved}'")
 
-            if resolved == "UNKNOWN" or resolved not in ASSIGNMENT_GROUPS:
+            # Case-insensitive match
+            groups_lower = {g.lower(): g for g in available_groups}
+            canonical = groups_lower.get(resolved.lower())
+
+            if resolved.upper() == "UNKNOWN" or not canonical:
                 logger.warning(f"LLM returned unrecognized group: '{resolved}'")
                 return None, True
 
+            resolved = canonical
             logger.info(f"LLM resolved group: '{resolved}' for {incident.incident_number}")
 
-            # Persist the resolved group onto the incident
+            # Persist resolved group immediately — independent of engineer availability
             await self.incident_service.update_incident(
                 incident_id,
                 IncidentUpdate(
@@ -127,17 +143,51 @@ class TriageService:
             return AgentResponse(
                 success=False,
                 agent_name="TriageAgent",
-                reasoning="Could not determine assignment group",
-                errors=["Assignment group is required for triage"],
+                reasoning="Could not determine a specific assignment group from the incident description. Please set the assignment group manually.",
+                errors=["Assignment group could not be resolved by AI"],
             )
 
-        # Step 2: Build AIContext
-        context = await self.context_service.build_for_incident(
-            incident_id=incident_id,
-            context_date=context_date,
-        )
+        # Step 2: Build AIContext — may have zero engineers if roster not uploaded
+        try:
+            context = await self.context_service.build_for_incident(
+                incident_id=incident_id,
+                context_date=context_date,
+            )
+        except Exception as e:
+            # Group was resolved and saved, but no engineers in roster for this group/date
+            logger.warning(f"[TriageService] Context build failed for {incident_id}: {e}")
+            # Clear assigned_to so UI shows empty, not a stale old value
+            await self.incident_service.update_incident(
+                incident_id,
+                IncidentUpdate(assigned_to=None),
+            )
+            return AgentResponse(
+                success=False,
+                agent_name="TriageAgent",
+                reasoning=(
+                    f"Assignment group resolved to '{group}' but no engineers are available "
+                    f"in the shift roster for {context_date}. "
+                    f"Please upload a shift roster for '{group}'."
+                ),
+                errors=[f"No engineers found in '{group}' for {context_date}"],
+            )
 
         # Step 3: Run TriageAgent (confirms group, counts availability)
+        if not context.engineers:
+            # Clear assigned_to so UI shows empty, not a stale old value
+            await self.incident_service.update_incident(
+                incident_id,
+                IncidentUpdate(assigned_to=None),
+            )
+            return AgentResponse(
+                success=False,
+                agent_name="TriageAgent",
+                reasoning=(
+                    f"Assignment group resolved to '{group}' but no engineers are available "
+                    f"on {context_date}. Please upload a shift roster for '{group}'."
+                ),
+                errors=[f"No engineers available in '{group}' on {context_date}"],
+            )
         request = AgentRequest(context=context)
         agent_response = await self.agent.run(request)
 
@@ -157,6 +207,11 @@ class TriageService:
         )
 
         if not assignment.success:
+            # Clear assigned_to — no engineer available, don't show stale value
+            await self.incident_service.update_incident(
+                incident_id,
+                IncidentUpdate(assigned_to=None),
+            )
             agent_response.success = False
             agent_response.errors.append(NO_AVAILABLE_ENGINEER)
             agent_response.reasoning = (

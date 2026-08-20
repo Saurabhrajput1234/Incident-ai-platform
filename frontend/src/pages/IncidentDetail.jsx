@@ -62,19 +62,36 @@ export default function IncidentDetail() {
       qc.invalidateQueries(['incident', id])
       qc.invalidateQueries(['incidents'])
     },
+    onMutate: () => {
+      // Reset sentinels so popup fires if triage assigns a new engineer
+      prevAssignedTo.current = null
+      reloadedRef.current = false
+    },
   })
 
   const updateMut = useMutation({
     mutationFn: (data) => incidentApi.update(id, data),
-    onSuccess: (updatedIncident, variables) => {
-      qc.invalidateQueries(['incident', id])
-      qc.invalidateQueries(['incidents'])
+    onSuccess: async (updatedIncident) => {
       setEditOpen(false)
-      if (!variables.assigned_to) {
-        setTriageResult({
-          success: true,
-          reasoning: 'Assignment was cleared — Triage Agent is running in the background to re-assign this incident.',
-        })
+
+      // Step 1: Immediately refetch so UI shows the saved state (e.g. cleared assigned_to)
+      await qc.refetchQueries({ queryKey: ['incident', id] })
+      qc.invalidateQueries(['incidents'])
+
+      // Step 2: If ticket is still active, run triage now (synchronously) so result
+      // is reflected immediately — don't wait for background task polling
+      if (updatedIncident.state === 'new' || updatedIncident.state === 'in_progress') {
+        try {
+          const triageRes = await triageApi.run(id)
+          // Refetch again to pick up any assignment changes from triage
+          await qc.refetchQueries({ queryKey: ['incident', id] })
+          qc.invalidateQueries(['incidents'])
+          // Show result banner
+          setTriageResult(triageRes)
+        } catch {
+          // Triage error — still refetch to show latest state
+          await qc.refetchQueries({ queryKey: ['incident', id] })
+        }
       }
     },
   })

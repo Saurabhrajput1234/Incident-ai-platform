@@ -108,8 +108,9 @@ class IncidentService:
             logger.warning(f"Update failed — incident not found: {incident_id}")
             raise NotFoundError(f"Incident '{incident_id}' not found")
 
-        # exclude_none=True ensures only provided fields are updated
-        update_data = payload.model_dump(exclude_none=True)
+        # exclude_unset=True ensures only fields explicitly set in the payload are updated,
+        # but preserves None values (unlike exclude_none which silently drops them)
+        update_data = payload.model_dump(exclude_unset=True)
         if not update_data:
             # Nothing to update — return as is
             logger.warning(f"Update called with no fields: {incident_id}")
