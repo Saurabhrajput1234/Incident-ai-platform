@@ -42,13 +42,35 @@ async def upload_roster(
     uploaded_by: str | None = Query(default=None),
     service: ShiftRosterService = Depends(get_service),
 ):
-    """Upload monthly/weekly shift roster Excel or CSV file."""
+    """Upload a single shift roster Excel or CSV file."""
     if not (file.filename.endswith(".xlsx") or file.filename.endswith(".csv")):
         raise HTTPException(status_code=400, detail="Only .xlsx and .csv files are supported")
     file_bytes = await file.read()
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
     return await service.upload_roster(file_bytes, file.filename, uploaded_by)
+
+
+@router.post("/upload-bulk", response_model=list[UploadSummary], status_code=status.HTTP_201_CREATED)
+async def upload_roster_bulk(
+    files: list[UploadFile] = File(..., description="Multiple shift roster .xlsx or .csv files"),
+    uploaded_by: str | None = Query(default=None),
+    service: ShiftRosterService = Depends(get_service),
+):
+    """Upload multiple shift roster files at once. Each file is processed independently."""
+    results = []
+    for file in files:
+        if not (file.filename.endswith(".xlsx") or file.filename.endswith(".csv")):
+            raise HTTPException(
+                status_code=400,
+                detail=f"File '{file.filename}': only .xlsx and .csv are supported",
+            )
+        file_bytes = await file.read()
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail=f"File '{file.filename}' is empty")
+        result = await service.upload_roster(file_bytes, file.filename, uploaded_by)
+        results.append(result)
+    return results
 
 
 @router.get("/uploads", response_model=list[UploadSummary])

@@ -31,6 +31,14 @@ export const rosterApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data)
   },
+  uploadBulk: (files, uploadedBy) => {
+    const form = new FormData()
+    files.forEach(f => form.append('files', f))
+    const params = uploadedBy ? `?uploaded_by=${encodeURIComponent(uploadedBy)}` : ''
+    return api.post(`/shift-roster/upload-bulk${params}`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
   uploads: () => api.get('/shift-roster/uploads').then(r => r.data),
   available: (params) => api.get('/shift-roster/available', { params }).then(r => r.data),
   searchEngineers: (params) => api.get('/shift-roster/search', { params }).then(r => r.data),

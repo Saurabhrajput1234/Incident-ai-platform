@@ -9,19 +9,68 @@ const CATEGORIES = ['network','hardware','software','database','security','acces
 const PRIORITIES = [{ v:'1',l:'1 - Critical'},{v:'2',l:'2 - High'},{v:'3',l:'3 - Medium'},{v:'4',l:'4 - Low'}]
 const SOURCES = ['manual','monitoring','email','phone','self_service','api']
 
+// const ASSIGNMENT_GROUPS = [
+//   'Windows Support','Network Support','Database Support','Linux Support',
+//   'Cloud Infrastructure','Storage Support','SAP Support','Oracle Support',
+//   'Security Operations','Middleware Support','Active Directory Support',
+//   'Backup Support','Citrix Support','Application Support','DevOps Support',
+//   'Hardware Support','Virtualization Support','Email Support',
+//   'Telecom Support','Endpoint Support',
+//   // Common queue
+//   'IT Service Desk','IT Helpdesk','General IT Support','L1 Support', "Enterprise Support",
+//     'General Support',
+//     'Technical Support',
+//     'Service Operations',
+// ]
+
 const ASSIGNMENT_GROUPS = [
-  'Windows Support','Network Support','Database Support','Linux Support',
-  'Cloud Infrastructure','Storage Support','SAP Support','Oracle Support',
-  'Security Operations','Middleware Support','Active Directory Support',
-  'Backup Support','Citrix Support','Application Support','DevOps Support',
-  'Hardware Support','Virtualization Support','Email Support',
-  'Telecom Support','Endpoint Support',
-  // Common queue
-  'IT Service Desk','IT Helpdesk','General IT Support','L1 Support', "Enterprise Support",
-    'General Support',
-    'Technical Support',
-    'Service Operations',
-]
+  "Apps Run - BPM",
+  "Apps Run - NON SAP ERP-AS400",
+  "Apps Run - NON SAP ERP-INF-INFOR",
+  "Apps Run - NON SAP ERP-MS NAV",
+  "Apps Run - NON SAP ERP-OAD-LAG",
+  "Apps Run - Stat & Tax",
+  "Apps Run - User-Admin-JDA/WMS",
+  "Apps Run-Ariba",
+  "Apps Run-BI-Analytics-SAP BO",
+  "Apps Run-BI-Analytics-DataLake",
+  "Apps Run-BI-Analytics-PowerBI",
+  "Apps Run-BI-Analytics-SAP BW",
+  "Apps Run-Christmas",
+  "Apps Run-JDE",
+  "Apps Run-Kronos",
+  "Apps Run-MES",
+  "Apps Run-Middleware - EAI",
+  "Apps Run-Middleware - EDI/EAI",
+  "Apps Run-MyML Operations",
+  "Apps Run-OT",
+  "Apps Run-SAP - BASIS",
+  "Apps Run-SAP - Batch - BASIS",
+  "Apps Run-SAP - Development",
+  "Apps Run-SAP - FICO",
+  "Apps Run-SAP - MM/WM/PP",
+  "Apps Run-SAP - PP/QM/PM",
+  "Apps Run-SAP - Security/GRC",
+  "Apps Run-Supply Chain",
+  "Apps Run-PLM",
+  "Apps Run-SAP - SD",
+  "Apps Run-SFDC",
+  "Apps Run-Sun-Corp Apps",
+  "Apps Run-MetaStorm",
+  "Apps Run-MKT Ecom",
+  "Apps Run-SharePoint",
+  "Apps Run-Hyperion",
+  "Apps Run-NON SAP ERP-XPPS",
+  "Apps Run-MTD-SFDC",
+  "Apps Run-Digital Ops",
+  "Apps Run-Robotic Process Automation",
+  "Apps Run-Robotic Process Automation-L",
+  "Apps Run-Workday",
+  "Grand Total",
+  'HCL Apps Run-SAP'
+];
+
+
 
 function Field({ label, required, children, hint }) {
   return (
