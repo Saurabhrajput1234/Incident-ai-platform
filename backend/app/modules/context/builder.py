@@ -53,6 +53,7 @@ def build_incident_context(incident: IncidentResponse) -> IncidentContext:
         category=incident.category,
         subcategory=incident.subcategory,
         assignment_group=incident.assignment_group,
+        assigned_to=incident.assigned_to,
         caller=incident.caller,
         created_at=incident.created_at,
     )
