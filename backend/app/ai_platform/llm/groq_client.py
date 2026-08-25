@@ -15,11 +15,7 @@ _client: AsyncGroq | None = None
 
 
 def get_groq_client() -> AsyncGroq:
-    """Return the shared AsyncGroq client, creating it on first call."""
-    global _client
-    if _client is None:
-        if not settings.GROQ_API_KEY:
-            raise RuntimeError("GROQ_API_KEY is not set in .env")
-        _client = AsyncGroq(api_key=settings.GROQ_API_KEY)
-        logger.info(f"Groq client initialized (model: {settings.GROQ_MODEL})")
-    return _client
+    """Return an AsyncGroq client initialized with current settings."""
+    if not settings.GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY is not set in .env")
+    return AsyncGroq(api_key=settings.GROQ_API_KEY)

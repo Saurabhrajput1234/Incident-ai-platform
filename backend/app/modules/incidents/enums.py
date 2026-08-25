@@ -28,6 +28,7 @@ class IncidentState(str, Enum):
     NEW = "new"
     IN_PROGRESS = "in_progress"
     ON_HOLD = "on_hold"
+    PENDING = "pending"
     RESOLVED = "resolved"
     CLOSED = "closed"
     CANCELLED = "cancelled"

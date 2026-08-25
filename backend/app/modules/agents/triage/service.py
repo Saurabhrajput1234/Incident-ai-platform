@@ -92,7 +92,7 @@ class TriageService:
 
             # Persist resolved group immediately — independent of engineer availability
             await self.incident_service.update_incident(
-                incident_id,
+                incident.id,
                 IncidentUpdate(
                     assignment_group=resolved,
                     work_notes=f"[Triage] Assignment group resolved by AI: {resolved}",
@@ -110,6 +110,7 @@ class TriageService:
         context_date: date | None = None,
         apply_recommendation: bool = True,
         force: bool = False,
+        auto_acknowledge: bool = True,
     ) -> AgentResponse:
         """
         Full triage flow.
@@ -225,13 +226,15 @@ class TriageService:
             return agent_response
 
         # Step 5: Update incident via IncidentService
+        ack_data = None
         if apply_recommendation:
             eng = assignment.engineer
             await self.incident_service.update_incident(
                 incident.id,
                 IncidentUpdate(
                     assigned_to=eng.name,
-                    state="in_progress",                    work_notes=(
+                    state="in_progress",
+                    work_notes=(
                         f"[Triage Agent] Assigned to {eng.name} "
                         f"(shift={eng.current_shift}, active_now={eng.is_shift_active}, "
                         f"group={group}). "
@@ -244,6 +247,18 @@ class TriageService:
                 f"[TriageService] {incident.incident_number} assigned to "
                 f"{eng.name} (group={group}, shift={eng.current_shift})"
             )
+
+            # Auto-trigger Acknowledgement Agent if requested
+            if auto_acknowledge:
+                try:
+                    from app.modules.agents.acknowledgement.service import AcknowledgementService
+                    ack_service = AcknowledgementService(self.db)
+                    ack_resp = await ack_service.process_acknowledgement(incident.id)
+                    if ack_resp.success:
+                        ack_data = ack_resp.result
+                        logger.info(f"[TriageService] Auto-acknowledgement succeeded for {incident.incident_number}")
+                except Exception as e:
+                    logger.error(f"[TriageService] Auto-acknowledgement failed: {e}")
 
         # Build final response
         triage_result = TriageResult(**agent_response.result)
@@ -260,6 +275,7 @@ class TriageService:
                 "fallback_used": assignment.fallback_used,
             },
             "llm_resolved_group": llm_used,
+            "acknowledgement": ack_data,
         }
 
         return agent_response

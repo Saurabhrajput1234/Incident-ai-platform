@@ -1,0 +1,304 @@
+[
+  {
+    "log_id": "LOG-20260817050110",
+    "incident_number": "INC0000006",
+    "caller_name": "Jane Doe",
+    "user_email": "caller@example.com",
+    "intent": "STANDARD_INCIDENT",
+    "template_name": "standard_ack.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-17T05:01:10.628249+00:00"
+  },
+  {
+    "log_id": "LOG-20260817050127",
+    "incident_number": "INC0000007",
+    "caller_name": "John Smith",
+    "user_email": "caller@example.com",
+    "intent": "INFORMATIONAL_REQUEST",
+    "template_name": "informational_ack.html",
+    "kb_articles_sent": [
+      "KB00101",
+      "KB00103"
+    ],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-17T05:01:27.670383+00:00"
+  },
+  {
+    "log_id": "LOG-20260817051637",
+    "incident_number": "INC0000008",
+    "caller_name": "Rahul Sharma",
+    "user_email": "caller@example.com",
+    "intent": "STANDARD_INCIDENT",
+    "template_name": "standard_ack.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-17T05:16:37.795934+00:00"
+  },
+  {
+    "log_id": "LOG-20260817051731",
+    "incident_number": "INC0000008",
+    "caller_name": "Rahul Sharma",
+    "user_email": "caller@example.com",
+    "intent": "STANDARD_INCIDENT",
+    "template_name": "standard_ack.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-17T05:17:31.466159+00:00"
+  },
+  {
+    "log_id": "LOG-20260817052213",
+    "incident_number": "INC0000007",
+    "caller_name": "John Smith",
+    "user_email": "jalajbalodi264@gmail.com",
+    "intent": "INFORMATIONAL_REQUEST",
+    "template_name": "informational_ack.html",
+    "kb_articles_sent": [
+      "KB00101",
+      "KB00103"
+    ],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-17T05:22:13.733376+00:00"
+  },
+  {
+    "log_id": "LOG-20260817124805",
+    "incident_number": "INC0000009",
+    "caller_name": "Rahul Sharma",
+    "user_email": "caller@example.com",
+    "intent": "STANDARD_INCIDENT",
+    "template_name": "standard_ack.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-17T12:48:05.968866+00:00"
+  },
+  {
+    "log_id": "LOG-20260817124903",
+    "incident_number": "INC0000009",
+    "caller_name": "Rahul Sharma",
+    "user_email": "caller@example.com",
+    "intent": "STANDARD_INCIDENT",
+    "template_name": "standard_ack.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-17T12:49:03.067649+00:00"
+  },
+  {
+    "log_id": "LOG-20260818045712",
+    "incident_number": "INC0000011",
+    "caller_name": "Anita Roy",
+    "user_email": "caller@example.com",
+    "intent": "STANDARD_INCIDENT",
+    "template_name": "standard_ack.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-18T04:57:12.420393+00:00"
+  },
+  {
+    "log_id": "LOG-20260819052658",
+    "incident_number": "INC0000012",
+    "caller_name": "Rahul Sharma",
+    "user_email": "caller@example.com",
+    "intent": "WRONG_TICKET_ACCESS",
+    "template_name": "wrong_ticket_access.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-19T05:26:58.034806+00:00"
+  },
+  {
+    "log_id": "LOG-20260819052707",
+    "incident_number": "INC0000013",
+    "caller_name": "Priya Patel",
+    "user_email": "caller@example.com",
+    "intent": "WRONG_ORG_ENVIRONMENT",
+    "template_name": "wrong_org_environment.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-19T05:27:07.583739+00:00"
+  },
+  {
+    "log_id": "LOG-20260819052718",
+    "incident_number": "INC0000014",
+    "caller_name": "David Miller",
+    "user_email": "caller@example.com",
+    "intent": "WRONG_TICKET_SERVICE_CATALOG",
+    "template_name": "wrong_ticket_service_catalog.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-19T05:27:18.075502+00:00"
+  },
+  {
+    "log_id": "LOG-20260819052731",
+    "incident_number": "INC0000015",
+    "caller_name": "Anita Roy",
+    "user_email": "caller@example.com",
+    "intent": "STANDARD_INCIDENT",
+    "template_name": "standard_ack.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-19T05:27:31.105999+00:00"
+  },
+  {
+    "log_id": "LOG-20260819052741",
+    "incident_number": "INC0000015",
+    "caller_name": "Anita Roy",
+    "user_email": "caller@example.com",
+    "intent": "STANDARD_INCIDENT",
+    "template_name": "standard_ack.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-19T05:27:41.689596+00:00"
+  },
+  {
+    "log_id": "LOG-20260819054935",
+    "incident_number": "INC0000016",
+    "caller_name": "Rahul Sharma",
+    "user_email": "caller@example.com",
+    "intent": "WRONG_REQUEST",
+    "template_name": "wrong_org_environment.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-19T05:49:35.615429+00:00"
+  },
+  {
+    "log_id": "LOG-20260819055107",
+    "incident_number": "INC0000016",
+    "caller_name": "Rahul Sharma",
+    "user_email": "caller@example.com",
+    "intent": "WRONG_REQUEST",
+    "template_name": "wrong_org_environment.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-19T05:51:07.478952+00:00"
+  },
+  {
+    "log_id": "LOG-20260819055316",
+    "incident_number": "INC0000016",
+    "caller_name": "Rahul Sharma",
+    "user_email": "caller@example.com",
+    "intent": "WRONG_REQUEST",
+    "template_name": "wrong_org_environment.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-19T05:53:16.874355+00:00"
+  },
+  {
+    "log_id": "LOG-20260819055321",
+    "incident_number": "INC0000007",
+    "caller_name": "John Smith",
+    "user_email": "caller@example.com",
+    "intent": "INFORMATION_REQUEST",
+    "template_name": "informational_ack.html",
+    "kb_articles_sent": [
+      "KB00101",
+      "KB00103"
+    ],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-19T05:53:21.535218+00:00"
+  },
+  {
+    "log_id": "LOG-20260819055459",
+    "incident_number": "INC0000017",
+    "caller_name": "Tina",
+    "user_email": "caller@example.com",
+    "intent": "SALESFORCE_INCORRECT_REQUEST",
+    "template_name": "salesforce_incorrect_request.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-19T05:54:59.206408+00:00"
+  },
+  {
+    "log_id": "LOG-20260819060844",
+    "incident_number": "INC0000018",
+    "caller_name": "Tina",
+    "user_email": "caller@example.com",
+    "intent": "SALESFORCE_INCORRECT_REQUEST",
+    "template_name": "salesforce_incorrect_request.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-19T06:08:44.108037+00:00"
+  },
+  {
+    "log_id": "LOG-20260819060909",
+    "incident_number": "INC0000018",
+    "caller_name": "Tina",
+    "user_email": "caller@example.com",
+    "intent": "SALESFORCE_INCORRECT_REQUEST",
+    "template_name": "salesforce_incorrect_request.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-19T06:09:09.799232+00:00"
+  },
+  {
+    "log_id": "LOG-20260820120440",
+    "incident_number": "INC0000019",
+    "caller_name": "Tina",
+    "user_email": "caller@example.com",
+    "intent": "SALESFORCE_INCORRECT_REQUEST",
+    "template_name": "salesforce_incorrect_request.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-20T12:04:40.725097+00:00"
+  },
+  {
+    "log_id": "LOG-20260820120900",
+    "incident_number": "INC0000006",
+    "caller_name": "Jane Doe",
+    "user_email": "caller@example.com",
+    "intent": "STANDARD_INCIDENT",
+    "template_name": "standard_ack.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-20T12:09:00.305172+00:00"
+  },
+  {
+    "log_id": "LOG-20260820120909",
+    "incident_number": "INC0000019",
+    "caller_name": "Tina",
+    "user_email": "caller@example.com",
+    "intent": "SALESFORCE_INCORRECT_REQUEST",
+    "template_name": "salesforce_incorrect_request.html",
+    "kb_articles_sent": [],
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-20T12:09:09.807073+00:00"
+  },
+  {
+    "log_id": "LOG-20260820121032",
+    "incident_number": "INC0000019",
+    "caller_name": "Tina",
+    "user_email": "caller@example.com",
+    "intent": "SALESFORCE_INCORRECT_REQUEST",
+    "template_name": "salesforce_incorrect_request.html",
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-20T12:10:32.434147+00:00"
+  },
+  {
+    "log_id": "LOG-20260820121036",
+    "incident_number": "INC0000006",
+    "caller_name": "Jane Doe",
+    "user_email": "caller@example.com",
+    "intent": "STANDARD_INCIDENT",
+    "template_name": "standard_ack.html",
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-20T12:10:36.751532+00:00"
+  },
+  {
+    "log_id": "LOG-20260820121329",
+    "incident_number": "INC0000019",
+    "caller_name": "Tina",
+    "user_email": "caller@example.com",
+    "intent": "SALESFORCE_INCORRECT_REQUEST",
+    "template_name": "salesforce_incorrect_request.html",
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-20T12:13:29.769484+00:00"
+  },
+  {
+    "log_id": "LOG-20260820121334",
+    "incident_number": "INC0000006",
+    "caller_name": "Jane Doe",
+    "user_email": "caller@example.com",
+    "intent": "STANDARD_INCIDENT",
+    "template_name": "standard_ack.html",
+    "delivery_status": "simulated_success",
+    "sent_timestamp": "2026-08-20T12:13:34.037390+00:00"
+  }
+]

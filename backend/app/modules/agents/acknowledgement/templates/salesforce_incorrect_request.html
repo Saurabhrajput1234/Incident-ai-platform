@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salesforce Incorrect Request Notice - {{ ticket_number }}</title>
+    <style>
+        body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; background-color: #f4f6f8; margin: 0; padding: 24px; color: #1e293b; }
+        .card { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.06); overflow: hidden; border: 1px solid #e2e8f0; }
+        .header { background: #00a1e0; color: #ffffff; padding: 28px 24px; text-align: center; }
+        .header h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+        .badge { display: inline-block; background: #0284c7; color: #ffffff; font-size: 13px; padding: 4px 14px; border-radius: 20px; margin-top: 10px; font-weight: 600; }
+        .content { padding: 28px 24px; line-height: 1.6; }
+        .greeting { font-size: 16px; font-weight: 600; color: #0f172a; margin-bottom: 12px; }
+        .alert-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 18px; margin: 20px 0; color: #0369a1; }
+        .alert-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; color: #075985; }
+        .steps-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .step-item { margin-bottom: 12px; font-size: 14px; color: #334155; }
+        .step-item strong { color: #0f172a; }
+        .btn-container { text-align: center; margin-top: 24px; }
+        .btn { display: inline-block; background: #00a1e0; color: #ffffff !important; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; }
+        .contact-note { background: #fffdf5; border: 1px solid #fef08a; padding: 14px; border-radius: 6px; font-size: 13px; color: #854d0e; margin-top: 16px; }
+        .footer { background: #f1f5f9; padding: 18px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h1>☁️ Salesforce Access & Update Request Notice</h1>
+            <div class="badge">Ticket: {{ ticket_number }}</div>
+        </div>
+        <div class="content">
+            <div class="greeting">Hi {{ caller_name }},</div>
+            <p>Good day to you.</p>
+            <p>Thank you for reaching out to the SBD IT Support Team.</p>
+            
+            <div class="alert-box">
+                <div class="alert-title">Incorrect Form Submitted</div>
+                This is not the correct form for Salesforce access or Profile Update requests.
+            </div>
+
+            <p>For access or updates in <strong>Salesforce.com GTS (EANZ) & GEM</strong>, you need to raise a Request Item (RITM). Please follow the steps below to submit your request:</p>
+
+            <div class="steps-box">
+                <div class="step-item"><strong>1.</strong> Go to IT Central: <a href="https://sbdkproduction.service-now.com/esc" target="_blank">https://sbdkproduction.service-now.com/esc</a></div>
+                <div class="step-item"><strong>2.</strong> Search for <strong>"Application Access Request"</strong>.</div>
+                <div class="step-item"><strong>3.</strong> Select the <strong>"Salesforce.com GTS (EANZ) & GEM"</strong> option in the Application name field in the Application Access Request form.</div>
+                <div class="step-item"><strong>4.</strong> Fill out the form according to your specific access requirements.</div>
+                <div class="step-item"><strong>5.</strong> Do mention any mirror ID whose access can be replicated for you in the Additional Comment section.</div>
+            </div>
+
+            <div class="btn-container">
+                <a href="https://sbdkproduction.service-now.com/esc" class="btn" target="_blank">Go to IT Central Portal &rarr;</a>
+            </div>
+
+            <div class="contact-note">
+                If you encounter any issues, please feel free to reach out to us at <a href="mailto:aman.mourya@sbdinc.com">aman.mourya@sbdinc.com</a> and we’ll be happy to assist you further.
+            </div>
+
+            <p style="margin-top: 20px; color: #64748b; font-size: 13px;">As this is not the correct form for access requests, this incident ticket will be updated accordingly.</p>
+            
+            <p>Regards,<br><strong>Aman Mourya</strong><br><em>HCL Apps Run-SFDC Support Team</em></p>
+        </div>
+        <div class="footer">
+            &copy; 2026 SBD IT Support Team — HCL Apps Run-SFDC
+        </div>
+    </div>
+</body>
+</html>

@@ -103,7 +103,11 @@ class IncidentService:
         Returns the existing record unchanged if no fields provided.
         Raises NotFoundError if the incident does not exist.
         """
-        existing = await self.repo.get_by_id(incident_id)
+        if incident_id.upper().startswith("INC"):
+            existing = await self.repo.get_by_number(incident_id.upper())
+        else:
+            existing = await self.repo.get_by_id(incident_id)
+
         if not existing:
             logger.warning(f"Update failed — incident not found: {incident_id}")
             raise NotFoundError(f"Incident '{incident_id}' not found")
@@ -116,7 +120,7 @@ class IncidentService:
             logger.warning(f"Update called with no fields: {incident_id}")
             return IncidentResponse.model_validate(existing)
 
-        incident = await self.repo.update(incident_id, update_data)
+        incident = await self.repo.update(existing.id, update_data)
         logger.info(f"Incident updated: {incident.incident_number}")
         return IncidentResponse.model_validate(incident)
 

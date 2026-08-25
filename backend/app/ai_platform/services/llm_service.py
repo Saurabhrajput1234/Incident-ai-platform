@@ -51,5 +51,7 @@ class LLMService:
         )
 
         result = response.choices[0].message.content.strip()
+        if "</think>" in result:
+            result = result.split("</think>")[-1].strip()
         logger.debug(f"LLM response ({len(result)} chars): {result[:100]}...")
         return result

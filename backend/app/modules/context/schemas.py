@@ -19,6 +19,7 @@ class IncidentContext(BaseModel):
     category: str | None
     subcategory: str | None
     assignment_group: str | None
+    assigned_to: str | None = None
     caller: str | None
     created_at: datetime
 
