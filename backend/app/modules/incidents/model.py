@@ -7,9 +7,13 @@ adapter without changing the service/API layers.
 """
 import uuid
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from sqlalchemy import String, Text, DateTime, Enum as SAEnum
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.postgres.base import Base
+
+if TYPE_CHECKING:
+    from app.modules.work_notes.model import IncidentWorkNote
 from app.modules.incidents.enums import (
     IncidentPriority, IncidentState, IncidentCategory,
     IncidentImpact, IncidentUrgency, IncidentEnvironment, IncidentSource
@@ -78,6 +82,15 @@ class Incident(Base):
     # Notes and comments
     work_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     comments: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # One-to-many: structured work note history
+    work_note_entries: Mapped[list["IncidentWorkNote"]] = relationship(
+        "IncidentWorkNote",
+        back_populates="incident",
+        cascade="all, delete-orphan",
+        order_by="IncidentWorkNote.created_at.desc()",
+        lazy="select",
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

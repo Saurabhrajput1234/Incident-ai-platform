@@ -10,7 +10,7 @@ signatures and swap it out via dependency injection.
 """
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import select, func, or_, update, delete
+from sqlalchemy import select, func, or_, update, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.incidents.model import Incident
 
@@ -26,26 +26,46 @@ class IncidentRepository:
 
     async def _generate_incident_number(self) -> str:
         """
-        Generate next sequential incident number.
+        Generate the next sequential incident number using MAX instead of COUNT.
+        MAX-based approach is safe after deletions and avoids count/number drift.
         Format: INC0000001, INC0000002, ...
-        NOTE: Not race-condition safe under high concurrency.
-        Replace with a DB sequence in production if needed.
         """
-        result = await self.db.execute(select(func.count()).select_from(Incident))
-        count = result.scalar() or 0
-        return f"INC{str(count + 1).zfill(7)}"
+        result = await self.db.execute(
+            select(func.max(Incident.incident_number))
+        )
+        max_number = result.scalar()
+
+        if max_number and max_number.startswith("INC"):
+            try:
+                next_num = int(max_number[3:]) + 1
+            except ValueError:
+                next_num = 1
+        else:
+            next_num = 1
+
+        return f"INC{str(next_num).zfill(7)}"
 
     async def create(self, data: dict) -> Incident:
-        """Insert a new incident record and return the persisted instance."""
-        incident = Incident(
-            id=str(uuid.uuid4()),
-            incident_number=await self._generate_incident_number(),
-            **data
-        )
-        self.db.add(incident)
-        await self.db.commit()
-        await self.db.refresh(incident)  # reload from DB to get defaults
-        return incident
+        """
+        Insert a new incident record and return the persisted instance.
+        Retries up to 5 times on incident_number collision (concurrent inserts).
+        """
+        for attempt in range(5):
+            try:
+                incident = Incident(
+                    id=str(uuid.uuid4()),
+                    incident_number=await self._generate_incident_number(),
+                    **data,
+                )
+                self.db.add(incident)
+                await self.db.commit()
+                await self.db.refresh(incident)
+                return incident
+            except Exception as e:
+                await self.db.rollback()
+                if "unique" in str(e).lower() and "incident_number" in str(e).lower() and attempt < 4:
+                    continue
+                raise
 
     async def get_by_id(self, incident_id: str) -> Incident | None:
         """Fetch a single incident by primary key. Returns None if not found."""

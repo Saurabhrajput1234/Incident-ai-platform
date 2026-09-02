@@ -7,8 +7,10 @@ All routes delegate to IncidentService — no business logic here.
 Auto-triggers Triage Agent after incident creation (background task).
 """
 import asyncio
+import csv
+import io
 import logging
-from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
+from fastapi import APIRouter, Depends, Query, UploadFile, File, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from app.database.postgres.session import get_db
 from app.modules.incidents.service import IncidentService
@@ -84,9 +86,76 @@ async def create_incident(
     Automatically triggers the Triage Agent in the background after creation.
     """
     incident = await service.create_incident(payload)
-    # Auto-trigger triage for new unassigned incidents
     background_tasks.add_task(_auto_triage, incident.id)
     return incident
+
+
+@router.post("/bulk-import", status_code=status.HTTP_200_OK)
+async def bulk_import_incidents(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(..., description="CSV file with incident rows"),
+    service: IncidentService = Depends(get_service),
+):
+    """
+    Bulk import incidents from a CSV file.
+    Each row creates one incident and queues triage automatically.
+    Required column: short_description
+    Optional: description, priority, state, category, subcategory, impact, urgency,
+              assignment_group, assigned_to, caller, configuration_item,
+              business_service, environment, source, work_notes
+    """
+    content = await file.read()
+    text = content.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text))
+
+    created = []
+    failed = []
+
+    def _get(row: dict, *keys) -> str | None:
+        for k in keys:
+            v = row.get(k) or row.get(k.lower()) or row.get(k.replace("_", " ").title())
+            if v and str(v).strip():
+                return str(v).strip()
+        return None
+
+    for i, row in enumerate(reader, start=2):
+        try:
+            payload = IncidentCreate(
+                short_description=_get(row, "short_description", "Short Description") or "",
+                description=_get(row, "description", "Description"),
+                priority=_get(row, "priority", "Priority") or "3",
+                state=_get(row, "state", "State") or "new",
+                category=_get(row, "category", "Category"),
+                subcategory=_get(row, "subcategory", "Subcategory"),
+                impact=_get(row, "impact", "Impact") or "2",
+                urgency=_get(row, "urgency", "Urgency") or "2",
+                assignment_group=_get(row, "assignment_group", "Assignment Group"),
+                assigned_to=_get(row, "assigned_to", "Assigned To"),
+                caller=_get(row, "caller", "Caller"),
+                configuration_item=_get(row, "configuration_item", "Configuration Item"),
+                business_service=_get(row, "business_service", "Business Service"),
+                environment=_get(row, "environment", "Environment"),
+                source=_get(row, "source", "Source") or "api",
+                work_notes=_get(row, "work_notes", "Work Notes"),
+            )
+            incident = await service.create_incident(payload)
+            background_tasks.add_task(_auto_triage, incident.id)
+            created.append({
+                "row": i,
+                "incident_number": incident.incident_number,
+                "id": incident.id,
+                "short_description": incident.short_description,
+            })
+        except Exception as e:
+            failed.append({"row": i, "error": str(e)})
+
+    return {
+        "total_rows": len(created) + len(failed),
+        "created": len(created),
+        "failed": len(failed),
+        "incidents": created,
+        "errors": failed,
+    }
 
 
 @router.get("", response_model=IncidentListResponse)

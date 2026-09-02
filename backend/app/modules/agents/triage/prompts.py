@@ -93,8 +93,8 @@ ASSIGNMENT_GROUPS = [
   "Apps Run-Robotic Process Automation",
   "Apps Run-Robotic Process Automation-L",
   "Apps Run-Workday",
-  "Grand Total"
-];
+  "HCL Apps Run-SAP",
+]
 
 
 def is_common_queue(assignment_group: str | None) -> bool:
