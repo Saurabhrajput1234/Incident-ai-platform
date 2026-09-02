@@ -13,6 +13,13 @@ export const incidentApi = {
   update: (id, data) => api.put(`/incidents/${id}`, data).then(r => r.data),
   delete: (id) => api.delete(`/incidents/${id}`),
   search: (params) => api.get('/incidents/search', { params }).then(r => r.data),
+  bulkImport: (file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/incidents/bulk-import', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
 }
 
 // ── Triage ─────────────────────────────────────────────
@@ -42,6 +49,24 @@ export const rosterApi = {
   uploads: () => api.get('/shift-roster/uploads').then(r => r.data),
   available: (params) => api.get('/shift-roster/available', { params }).then(r => r.data),
   searchEngineers: (params) => api.get('/shift-roster/search', { params }).then(r => r.data),
+}
+
+// ── Dashboard ──────────────────────────────────────────
+export const dashboardApi = {
+  stats: () => api.get('/dashboard/stats').then(r => r.data),
+  trends: () => api.get('/dashboard/trends').then(r => r.data),
+  byGroup: () => api.get('/dashboard/by-group').then(r => r.data),
+  byPriority: () => api.get('/dashboard/by-priority').then(r => r.data),
+  byState: () => api.get('/dashboard/by-state').then(r => r.data),
+  triageLogs: () => api.get('/dashboard/triage-logs').then(r => r.data),
+}
+
+// ── Work Notes ─────────────────────────────────────────
+export const workNoteApi = {
+  list: (incidentId, limit = 100) =>
+    api.get(`/incidents/${incidentId}/work-notes`, { params: { limit } }).then(r => r.data),
+  add: (incidentId, data) =>
+    api.post(`/incidents/${incidentId}/work-notes`, data).then(r => r.data),
 }
 
 export default api

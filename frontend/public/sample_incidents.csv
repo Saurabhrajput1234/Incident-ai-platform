@@ -1,0 +1,51 @@
+short_description,description,priority,category,assignment_group,caller,environment,source,state
+SAP BASIS system down,SAP production system is completely unresponsive. All users unable to login. Critical business impact.,1,software,Apps Run-SAP - BASIS,Rajesh Kumar,production,monitoring,new
+BPM workflow stuck,Business Process Management workflow approval chain is frozen. Multiple purchase orders pending.,1,software,Apps Run - BPM,Priya Sharma,production,monitoring,new
+SAP FICO posting error,Financial postings failing with error code AA147. Month-end closing at risk.,1,software,Apps Run-SAP - FICO,Amit Patel,production,manual,new
+Workday login failure,Multiple HR users unable to login to Workday. Password reset not working.,2,software,Apps Run-Workday,Sunita Rao,production,monitoring,new
+SAP MM goods receipt issue,Goods receipt posting failing in SAP MM. Warehouse operations blocked.,2,software,Apps Run-SAP - MM/WM/PP,Vikram Singh,production,manual,new
+JDE order processing error,JD Edwards order processing module throwing SQL errors. Sales orders cannot be created.,1,software,Apps Run-JDE,Meera Nair,production,monitoring,new
+PowerBI dashboard not loading,Executive PowerBI dashboards blank after latest update. Board meeting in 2 hours.,2,software,Apps Run-BI-Analytics-PowerBI,Arun Menon,production,self_service,new
+SAP SD invoice not printing,Sales invoices not generating in SAP SD. Billing cycle impacted.,2,software,Apps Run-SAP - SD,Deepa Krishnan,production,manual,new
+EDI message failure,Outbound EDI 850 purchase order messages failing to transmit to suppliers.,1,software,Apps Run-Middleware - EDI/EAI,Karthik Iyer,production,monitoring,new
+SharePoint site collection error,Corporate SharePoint intranet throwing 503 errors. Document collaboration stopped.,2,software,Apps Run-SharePoint,Lakshmi Venkat,production,monitoring,new
+SAP Batch job failure,Nightly SAP batch processing job failed at 2AM. Financial reports not generated.,1,software,Apps Run-SAP - Batch - BASIS,Suresh Babu,production,monitoring,new
+Kronos timekeeping down,Employee time tracking system unavailable. Payroll processing at risk.,1,software,Apps Run-Kronos,Ananya Reddy,production,monitoring,new
+SAP Security role request,User unable to access SAP transaction due to missing authorization object.,3,access,Apps Run-SAP - Security/GRC,Ravi Teja,production,self_service,new
+Ariba purchase order stuck,Ariba procurement workflow approval stuck. Vendor payment blocked.,2,software,Apps Run-Ariba,Pavithra Srinivas,production,manual,new
+SAP BW report failure,SAP BW data extraction job failed. Morning management reports unavailable.,2,software,Apps Run-BI-Analytics-SAP BW,Ganesh Kumar,production,monitoring,new
+MES production line halt,Manufacturing Execution System connection lost. Production line 3 stopped.,1,software,Apps Run-MES,Harish Nambiar,production,monitoring,new
+SFDC lead assignment broken,Salesforce CRM lead auto-assignment rules not firing. Sales team cannot track new leads.,2,software,Apps Run-SFDC,Nalini Pillai,production,manual,new
+DataLake pipeline failure,ETL pipeline to DataLake failed overnight. Analytics data 24 hours stale.,2,software,Apps Run-BI-Analytics-DataLake,Siva Prasad,production,monitoring,new
+AS400 application error,AS400 ERP application throwing runtime error on order entry screen.,2,software,Apps Run - NON SAP ERP-AS400,Madhavi Latha,production,manual,new
+RPA bot stopped processing,Robotic Process Automation bot for invoice processing stopped. 200 invoices queued.,2,software,Apps Run-Robotic Process Automation,Venkat Ramana,production,monitoring,new
+SAP PP production order issue,Production order confirmation failing in SAP PP. Factory floor operations impacted.,2,software,Apps Run-SAP - PP/QM/PM,Chandra Sekhar,production,manual,new
+Hyperion consolidation error,Financial consolidation failing in Hyperion. Quarter-end reporting blocked.,1,software,Apps Run-Hyperion,Usha Rani,production,monitoring,new
+EAI middleware connection lost,Enterprise Application Integration middleware lost connection to SAP. Data sync stopped.,1,software,Apps Run-Middleware - EAI,Mohan Das,production,monitoring,new
+Infor ERP slow performance,Infor ERP system extremely slow. Users experiencing 5 minute page load times.,2,software,Apps Run - NON SAP ERP-INF-INFOR,Padma Lakshmi,production,monitoring,new
+PLM design data missing,Product Lifecycle Management system showing missing design documents.,2,software,Apps Run-PLM,Suresh Chandra,production,manual,new
+MyML operations alert,MyML operations monitoring alert triggered. Model serving latency above threshold.,2,software,Apps Run-MyML Operations,Anand Krishnan,production,monitoring,new
+Christmas campaign portal down,Seasonal campaign management portal unavailable. Marketing team blocked.,1,software,Apps Run-Christmas,Revathi Nair,production,monitoring,new
+Sun Corp Apps login issue,Sun Microsystems corporate application login failing for finance team.,2,access,Apps Run-Sun-Corp Apps,Balaji Swamy,production,manual,new
+JDA WMS inventory discrepancy,JDA Warehouse Management System showing inventory count discrepancy.,2,software,Apps Run - User-Admin-JDA/WMS,Lavanya Kumar,production,manual,new
+SAP Development transport error,SAP development transport to production failed. Code deployment blocked.,2,software,Apps Run-SAP - Development,Manoj Verma,production,manual,new
+MetaStorm process crash,MetaStorm BPM process engine crashed. Approval workflows not processing.,1,software,Apps Run-MetaStorm,Rekha Sharma,production,monitoring,new
+SAP BO report server down,SAP Business Objects report server not responding. Daily reports unavailable.,2,software,Apps Run-BI-Analytics-SAP BO,Prasad Reddy,production,monitoring,new
+Supply chain planning failure,Supply chain planning module failing to generate replenishment orders.,1,software,Apps Run-Supply Chain,Sushma Rao,production,monitoring,new
+MS Navision posting blocked,Microsoft Navision general ledger posting blocked by validation error.,2,software,Apps Run - NON SAP ERP-MS NAV,Ranjit Singh,production,manual,new
+Digital ops monitoring alert,Digital operations dashboard showing critical service degradation across multiple APIs.,1,software,Apps Run-Digital Ops,Nirmala Devi,production,monitoring,new
+HCL SAP connectivity issue,HCL SAP environment connectivity dropping intermittently. Remote users affected.,2,software,HCL Apps Run-SAP,Vivek Nair,production,monitoring,new
+OT system alarm triggered,Operational Technology system generating continuous alarms. Production floor alert.,1,software,Apps Run-OT,Bhavani Prasad,production,monitoring,new
+SAP GRC compliance report,SAP GRC access risk report not generating. Compliance audit deadline today.,2,software,Apps Run-SAP - Security/GRC,Sridevi Kumar,production,self_service,new
+XPPS ERP integration failure,XPPS non-SAP ERP integration with warehouse failing. Stock updates not syncing.,2,software,Apps Run-NON SAP ERP-XPPS,Murali Krishna,production,monitoring,new
+MTD Salesforce sync issue,MTD Salesforce instance not syncing customer data. Field sales team impacted.,2,software,Apps Run-MTD-SFDC,Kavitha Nambiar,production,monitoring,new
+Stat Tax filing module error,Tax and statutory filing module throwing calculation errors. Filing deadline at risk.,1,software,Apps Run - Stat & Tax,Saritha Menon,production,manual,new
+OAD LAG system unreachable,OAD LAG ERP system unreachable from corporate network. Remote site impacted.,2,software,Apps Run - NON SAP ERP-OAD-LAG,Deepak Pillai,production,monitoring,new
+MKT Ecom platform slow,Marketing Ecommerce platform response time exceeding 8 seconds. Customer checkout affected.,1,software,Apps Run-MKT Ecom,Preethi Suresh,production,monitoring,new
+RPA-L bot license expired,RPA-L automation bot license expired. Document processing halted.,2,software,Apps Run-Robotic Process Automation-L,Ashwin Babu,production,manual,new
+SAP Basis kernel upgrade needed,SAP kernel version outdated causing intermittent dumps. Stability risk.,3,software,Apps Run-SAP - BASIS,Gopal Rao,production,manual,new
+Ariba catalog not loading,Ariba procurement catalog items not loading for purchasing team.,3,software,Apps Run-Ariba,Shanthi Kumar,production,self_service,new
+Workday payroll discrepancy,Payroll calculation showing incorrect deductions for 12 employees.,2,software,Apps Run-Workday,Jayanthi Reddy,production,manual,new
+JDE financial period closed,JDE ERP financial period incorrectly closed. Cannot post current month transactions.,1,software,Apps Run-JDE,Ramesh Babu,production,manual,new
+PowerBI data refresh failed,PowerBI datasets not refreshing from data warehouse. Dashboards showing stale data.,3,software,Apps Run-BI-Analytics-PowerBI,Meenakshi Iyer,production,monitoring,new
+SAP WM warehouse transfer order,Warehouse transfer order creation failing in SAP WM. Goods movement blocked.,2,software,Apps Run-SAP - MM/WM/PP,Kiran Shankar,production,manual,new

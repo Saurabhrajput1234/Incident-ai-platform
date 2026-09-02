@@ -1,9 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { incidentApi, triageApi } from '../api/client'
+import { incidentApi, triageApi, workNoteApi } from '../api/client'
 import { PriorityBadge, StateBadge } from '../components/Badge'
 import Spinner from '../components/Spinner'
-import { ArrowLeft, Bot, RefreshCw, User, Clock, Tag, Server, Pencil, X, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Bot, RefreshCw, User, Clock, Tag, Server, Pencil, X, CheckCircle, MessageSquare, Plus } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 
@@ -14,6 +14,11 @@ export default function IncidentDetail() {
   const [triageResult, setTriageResult] = useState(null)
   const [editOpen, setEditOpen] = useState(false)
   const [triagePopup, setTriagePopup] = useState(null)
+  const [addNoteOpen, setAddNoteOpen] = useState(false)
+  const [newNoteText, setNewNoteText] = useState('')
+  const [noteSourceType, setNoteSourceType] = useState('USER')
+  const [noteSourceName, setNoteSourceName] = useState('')
+  const [addingNote, setAddingNote] = useState(false)
   const prevAssignedTo = useRef('__initial__') // sentinel: skip the very first load
   const reloadedRef = useRef(false)
 
@@ -27,6 +32,14 @@ export default function IncidentDetail() {
       const shouldPoll = (inc.state === 'new' || inc.state === 'in_progress') && !inc.assigned_to
       return shouldPoll ? 3000 : false
     },
+  })
+
+  // Work notes — refresh every 5s while the incident is active
+  const { data: workNotes = [] } = useQuery({
+    queryKey: ['work-notes', id],
+    queryFn: () => workNoteApi.list(id),
+    refetchInterval: 5000,
+    enabled: !!id,
   })
 
   // Only show popup when assigned_to transitions null → value AFTER initial load
@@ -61,6 +74,7 @@ export default function IncidentDetail() {
       setTriageResult(res)
       qc.invalidateQueries(['incident', id])
       qc.invalidateQueries(['incidents'])
+      qc.invalidateQueries(['work-notes', id])
     },
     onMutate: () => {
       // Reset sentinels so popup fires if triage assigns a new engineer
@@ -77,6 +91,7 @@ export default function IncidentDetail() {
       // Step 1: Immediately refetch so UI shows the saved state (e.g. cleared assigned_to)
       await qc.refetchQueries({ queryKey: ['incident', id] })
       qc.invalidateQueries(['incidents'])
+      qc.invalidateQueries(['work-notes', id])
 
       // Step 2: If ticket is still active, run triage now (synchronously) so result
       // is reflected immediately — don't wait for background task polling
@@ -86,15 +101,38 @@ export default function IncidentDetail() {
           // Refetch again to pick up any assignment changes from triage
           await qc.refetchQueries({ queryKey: ['incident', id] })
           qc.invalidateQueries(['incidents'])
+          qc.invalidateQueries(['work-notes', id])
           // Show result banner
           setTriageResult(triageRes)
         } catch {
           // Triage error — still refetch to show latest state
           await qc.refetchQueries({ queryKey: ['incident', id] })
+          qc.invalidateQueries(['work-notes', id])
         }
       }
     },
   })
+
+  const handleAddNote = async () => {
+    const msg = newNoteText.trim()
+    const name = noteSourceName.trim()
+    if (!msg || !name) return
+    setAddingNote(true)
+    try {
+      await workNoteApi.add(id, {
+        message: msg,
+        source_type: noteSourceType,
+        source_name: name,
+      })
+      setNewNoteText('')
+      setNoteSourceName('')
+      setNoteSourceType('USER')
+      setAddNoteOpen(false)
+      qc.invalidateQueries(['work-notes', id])
+    } finally {
+      setAddingNote(false)
+    }
+  }
 
   if (isLoading) {
     return <div className="flex justify-center py-20"><Spinner size="lg" /></div>
@@ -175,10 +213,87 @@ export default function IncidentDetail() {
             </p>
           </Card>
 
-          <Card title="Work Notes">
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">
-              {incident.work_notes ?? <span className="text-gray-400 italic">No work notes.</span>}
-            </p>
+          <Card title={
+            <div className="flex items-center justify-between">
+              <span>Work Notes {workNotes.length > 0 && <span className="text-xs font-normal text-gray-400 ml-1">({workNotes.length})</span>}</span>
+              <button
+                onClick={() => setAddNoteOpen(v => !v)}
+                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+              >
+                <Plus size={13} /> Add Note
+              </button>
+            </div>
+          }>
+            {/* Add note form */}
+            {addNoteOpen && (
+              <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
+                {/* Source type + name row */}
+                <div className="flex gap-2">
+                  <div className="flex-shrink-0">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Source</label>
+                    <select
+                      value={noteSourceType}
+                      onChange={e => setNoteSourceType(e.target.value)}
+                      className="border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="USER">User</option>
+                      <option value="ENGINEER">Engineer</option>
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      {noteSourceType === 'ENGINEER' ? 'Engineer Name' : 'Your Name'}
+                    </label>
+                    <input
+                      value={noteSourceName}
+                      onChange={e => setNoteSourceName(e.target.value)}
+                      placeholder={noteSourceType === 'ENGINEER' ? 'e.g. Priya Sharma' : 'e.g. Rahul Sharma'}
+                      className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Message */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Note</label>
+                  <textarea
+                    value={newNoteText}
+                    onChange={e => setNewNoteText(e.target.value)}
+                    rows={3}
+                    placeholder="Write a work note…"
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleAddNote}
+                    disabled={addingNote || !newNoteText.trim() || !noteSourceName.trim()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium rounded"
+                  >
+                    {addingNote ? <Spinner size="sm" /> : <MessageSquare size={12} />}
+                    {addingNote ? 'Adding…' : 'Add Note'}
+                  </button>
+                  <button
+                    onClick={() => { setAddNoteOpen(false); setNewNoteText(''); setNoteSourceName(''); setNoteSourceType('USER') }}
+                    className="px-3 py-1.5 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Work notes timeline */}
+            {workNotes.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">No work notes.</p>
+            ) : (
+              <div className="space-y-3">
+                {workNotes.map((note) => (
+                  <WorkNoteEntry key={note.id} note={note} />
+                ))}
+              </div>
+            )}
           </Card>
 
           {incident.comments && (
@@ -276,6 +391,44 @@ function Card({ title, children }) {
   )
 }
 
+const SOURCE_STYLES = {
+  TRIAGE_AGENT:          { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Triage Agent' },
+  ACKNOWLEDGEMENT_AGENT: { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'Ack Agent' },
+  PENDING_AGENT:         { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Pending Agent' },
+  ENGINEER:              { bg: 'bg-green-100',  text: 'text-green-700',  label: 'Engineer' },
+  USER:                  { bg: 'bg-gray-100',   text: 'text-gray-600',   label: 'User' },
+  SYSTEM:                { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'System' },
+}
+
+function WorkNoteEntry({ note }) {
+  const style = SOURCE_STYLES[note.source_type] ?? SOURCE_STYLES.SYSTEM
+  const time = new Date(note.created_at).toLocaleString()
+
+  return (
+    <div className="flex gap-3 text-sm">
+      <div className="flex-shrink-0 mt-0.5">
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center ${style.bg}`}>
+          <MessageSquare size={13} className={style.text} />
+        </div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${style.bg} ${style.text}`}>
+            {style.label}
+          </span>
+          <span className="text-gray-700 font-medium text-xs">{note.source_name}</span>
+          {note.action_type && (
+            <span className="text-xs text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded">
+              {note.action_type.replace(/_/g, ' ')}
+            </span>
+          )}
+          <span className="text-xs text-gray-400 ml-auto">{time}</span>
+        </div>
+        <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{note.message}</p>
+      </div>
+    </div>
+  )
+}
 function Row({ label, icon, children }) {
   return (
     <div className="flex items-start justify-between gap-2">
@@ -296,14 +449,51 @@ function mapUrgency(v) {
 
 const CATEGORIES = ['network','hardware','software','database','security','access','email','vpn','application','other']
 const ASSIGNMENT_GROUPS = [
-  'Windows Support','Network Support','Database Support','Linux Support',
-  'Cloud Infrastructure','Storage Support','SAP Support','Oracle Support',
-  'Security Operations','Middleware Support','Active Directory Support',
-  'Backup Support','Citrix Support','Application Support','DevOps Support',
-  'Hardware Support','Virtualization Support','Email Support',
-  'Telecom Support','Endpoint Support',
-  'IT Service Desk','IT Helpdesk','General IT Support','L1 Support',
-]
+  "Apps Run - BPM",
+  "Apps Run - NON SAP ERP-AS400",
+  "Apps Run - NON SAP ERP-INF-INFOR",
+  "Apps Run - NON SAP ERP-MS NAV",
+  "Apps Run - NON SAP ERP-OAD-LAG",
+  "Apps Run - Stat & Tax",
+  "Apps Run - User-Admin-JDA/WMS",
+  "Apps Run-Ariba",
+  "Apps Run-BI-Analytics-SAP BO",
+  "Apps Run-BI-Analytics-DataLake",
+  "Apps Run-BI-Analytics-PowerBI",
+  "Apps Run-BI-Analytics-SAP BW",
+  "Apps Run-Christmas",
+  "Apps Run-JDE",
+  "Apps Run-Kronos",
+  "Apps Run-MES",
+  "Apps Run-Middleware - EAI",
+  "Apps Run-Middleware - EDI/EAI",
+  "Apps Run-MyML Operations",
+  "Apps Run-OT",
+  "Apps Run-SAP - BASIS",
+  "Apps Run-SAP - Batch - BASIS",
+  "Apps Run-SAP - Development",
+  "Apps Run-SAP - FICO",
+  "Apps Run-SAP - MM/WM/PP",
+  "Apps Run-SAP - PP/QM/PM",
+  "Apps Run-SAP - Security/GRC",
+  "Apps Run-Supply Chain",
+  "Apps Run-PLM",
+  "Apps Run-SAP - SD",
+  "Apps Run-SFDC",
+  "Apps Run-Sun-Corp Apps",
+  "Apps Run-MetaStorm",
+  "Apps Run-MKT Ecom",
+  "Apps Run-SharePoint",
+  "Apps Run-Hyperion",
+  "Apps Run-NON SAP ERP-XPPS",
+  "Apps Run-MTD-SFDC",
+  "Apps Run-Digital Ops",
+  "Apps Run-Robotic Process Automation",
+  "Apps Run-Robotic Process Automation-L",
+  "Apps Run-Workday",
+  "Grand Total",
+  'HCL Apps Run-SAP'
+];
 
 const iCls = "w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 
@@ -457,6 +647,10 @@ function EditModal({ incident, onClose, onSave, isSaving, saveError }) {
               <EditField label="Assignment Group">
                 <select {...register('assignment_group')} className={iCls}>
                   <option value="">— Unassigned —</option>
+                  {/* Show current value as option even if not in the standard list */}
+                  {incident.assignment_group && !ASSIGNMENT_GROUPS.includes(incident.assignment_group) && (
+                    <option value={incident.assignment_group}>{incident.assignment_group}</option>
+                  )}
                   {ASSIGNMENT_GROUPS.map(g => (
                     <option key={g} value={g}>{g}</option>
                   ))}

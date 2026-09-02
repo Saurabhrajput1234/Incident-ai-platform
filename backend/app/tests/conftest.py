@@ -7,6 +7,7 @@ from app.main import app as fastapi_app
 from app.database.postgres.base import Base
 from app.database.postgres.session import get_db
 import app.modules.incidents.model  # noqa: F401
+import app.modules.work_notes.model  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
