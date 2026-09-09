@@ -28,6 +28,11 @@ export const triageApi = {
   context: (id) => api.get(`/triage/${id}/context`).then(r => r.data),
 }
 
+// ── Pending Agent ──────────────────────────────────────
+export const pendingApi = {
+  getCycle: (id) => api.get(`/pending/${id}/cycle`).then(r => r.data),
+}
+
 // ── Shift Roster ───────────────────────────────────────
 export const rosterApi = {
   upload: (file, uploadedBy) => {

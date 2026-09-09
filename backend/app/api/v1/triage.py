@@ -56,6 +56,7 @@ async def run_triage(
         incident_id=incident_id,
         context_date=context_date,
         apply_recommendation=apply_recommendation,
+        force=True,
         auto_acknowledge=auto_acknowledge,
     )
 

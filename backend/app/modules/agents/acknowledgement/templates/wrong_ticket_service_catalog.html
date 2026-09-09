@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Action Required: Service Catalog Order Notice - {{ ticket_number }}</title>
+    <style>
+        body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; background-color: #f4f6f8; margin: 0; padding: 24px; color: #1e293b; }
+        .card { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.06); overflow: hidden; border: 1px solid #e2e8f0; }
+        .header { background: #0d9488; color: #ffffff; padding: 28px 24px; text-align: center; }
+        .header h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+        .badge { display: inline-block; background: #14b8a6; color: #ffffff; font-size: 13px; padding: 4px 14px; border-radius: 20px; margin-top: 10px; font-weight: 600; }
+        .content { padding: 28px 24px; line-height: 1.6; }
+        .greeting { font-size: 16px; font-weight: 600; color: #0f172a; margin-bottom: 12px; }
+        .alert-box { background: #ccfbf1; border: 1px solid #99f6e4; border-radius: 8px; padding: 18px; margin: 20px 0; color: #115e59; }
+        .alert-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; color: #134e4a; }
+        .details-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin: 20px 0; }
+        .details-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 14px; }
+        .details-row:last-child { border-bottom: none; }
+        .label { font-weight: 600; color: #64748b; }
+        .value { font-weight: 600; color: #0f172a; text-align: right; }
+        .status-pill { color: #0d9488; background: #e6fffa; padding: 2px 10px; border-radius: 12px; font-size: 12px; }
+        .btn-container { text-align: center; margin-top: 24px; }
+        .btn { display: inline-block; background: #0d9488; color: #ffffff !important; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; }
+        .footer { background: #f1f5f9; padding: 18px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h1>📦 Hardware / Software Order Notice</h1>
+            <div class="badge">Ticket: {{ ticket_number }}</div>
+        </div>
+        <div class="content">
+            <div class="greeting">Hello {{ caller_name }},</div>
+            <p>We received your ticket regarding: <strong>"{{ short_description }}"</strong>.</p>
+            
+            <div class="alert-box">
+                <div class="alert-title">Wrong Ticket Type: Service Catalog Order Required</div>
+                You have submitted an <strong>Incident Ticket</strong> for a hardware or software procurement request (e.g., laptop equipment, monitor, or new software license). Incidents are reserved for system break/fix issues. New procurement requests must be ordered via the Service Catalog portal.
+            </div>
+
+            <div class="details-box">
+                <div class="details-row"><span class="label">Ticket Number:</span> <span class="value">{{ ticket_number }}</span></div>
+                <div class="details-row"><span class="label">Requested Item:</span> <span class="value">Hardware / Software License</span></div>
+                <div class="details-row"><span class="label">Assigned Queue:</span> <span class="value">{{ assignment_group }}</span></div>
+                <div class="details-row"><span class="label">Status:</span> <span class="value status-pill">Redirecting to Service Catalog</span></div>
+            </div>
+
+            <p>To request new equipment or software licenses, please submit an order via the IT Service Catalog using the link below:</p>
+
+            <div class="btn-container">
+                <a href="https://servicenow.corp.internal/nav_to.do?uri=catalog_hardware_software.do" class="btn">Go to IT Service Catalog &rarr;</a>
+            </div>
+        </div>
+        <div class="footer">
+            &copy; 2026 Enterprise Incident AI Platform — IT Procurement & Assets Support
+        </div>
+    </div>
+</body>
+</html>

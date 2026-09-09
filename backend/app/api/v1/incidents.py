@@ -51,30 +51,6 @@ async def _auto_triage(incident_id: str) -> None:
         await engine.dispose()
 
 
-async def _auto_triage_force(incident_id: str) -> None:
-    """
-    Background task: force re-triage after any incident update.
-    Uses force=True so it re-assigns even if already assigned.
-    """
-    from app.modules.agents.triage.service import TriageService
-
-    engine = create_async_engine(settings.DATABASE_URL, future=True)
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    try:
-        async with session_factory() as db:
-            triage = TriageService(db)
-            response = await triage.run_triage(incident_id=incident_id, force=True)
-            if response.success:
-                logger.info(f"[Auto-Triage-Force] {incident_id} re-triaged successfully")
-            else:
-                logger.warning(f"[Auto-Triage-Force] {incident_id} re-triage failed: {response.errors}")
-    except Exception as e:
-        logger.error(f"[Auto-Triage-Force] {incident_id} error: {e}")
-    finally:
-        await engine.dispose()
-
-
 @router.post("", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
 async def create_incident(
     payload: IncidentCreate,
@@ -214,22 +190,12 @@ async def get_incident(
 async def update_incident(
     incident_id: str,
     payload: IncidentUpdate,
-    background_tasks: BackgroundTasks,
     service: IncidentService = Depends(get_service),
 ):
     """
     Update an existing incident.
-    Auto-triggers the Triage Agent (force re-assign) after every update
-    on new/in_progress incidents so the assignment stays current.
     """
-    updated = await service.update_incident(incident_id, payload)
-
-    # Auto re-triage on every save for active tickets
-    if updated.state in ('new', 'in_progress'):
-        logger.info(f"Incident {incident_id} updated — triggering re-triage")
-        background_tasks.add_task(_auto_triage_force, incident_id)
-
-    return updated
+    return await service.update_incident(incident_id, payload)
 
 
 @router.delete("/{incident_id}", status_code=status.HTTP_204_NO_CONTENT)
