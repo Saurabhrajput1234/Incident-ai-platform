@@ -28,6 +28,7 @@ class IncidentService:
     """
 
     def __init__(self, db: AsyncSession):
+        self.db = db
         self.repo = IncidentRepository(db)
         self.work_note_svc = WorkNoteService(db)
 
@@ -157,10 +158,31 @@ class IncidentService:
         await self.work_note_svc.add_note(
             incident_id=existing.id,
             message=msg,
-            source_type=WorkNoteSourceType.USER,
-            source_name="User",
+            source_type=WorkNoteSourceType.ENGINEER,
+            source_name=existing.assigned_to or "Engineer",
             action_type=action,
         )
+
+        # State change transitions
+        if "state" in update_data:
+            if update_data["state"] in ("pending", "on_hold"):
+                try:
+                    from app.modules.agents.pending.service import PendingService
+                    pending_svc = PendingService(self.db)
+                    await pending_svc.process_pending_transition(incident_id=existing.id)
+                except Exception as e:
+                    logger.error(f"[IncidentService] Auto-trigger for PendingAgent failed: {e}")
+            else:
+                # State moved away from pending (e.g. to in_progress/active, resolved, closed) -> cancel active pending cycle
+                try:
+                    from app.modules.agents.pending.repository import PendingCycleRepository
+                    cycle_repo = PendingCycleRepository(self.db)
+                    active_cycle = await cycle_repo.get_active_cycle(existing.id)
+                    if active_cycle:
+                        await cycle_repo.cancel_cycle(active_cycle)
+                        logger.info(f"[IncidentService] Active pending cycle {active_cycle.id} cancelled because state moved to {update_data['state']}")
+                except Exception as e:
+                    logger.error(f"[IncidentService] Failed to cancel active pending cycle: {e}")
 
         return IncidentResponse.model_validate(incident)
 

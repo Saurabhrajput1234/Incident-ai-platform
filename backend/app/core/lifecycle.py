@@ -4,9 +4,11 @@ Application lifecycle manager.
 Handles startup and shutdown events using FastAPI's lifespan context.
 Startup tasks run before yield, shutdown tasks after yield.
 """
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.core.logging import logger
+from app.modules.agents.pending.scheduler import start_pending_reminder_scheduler
 
 
 @asynccontextmanager
@@ -17,7 +19,12 @@ async def lifespan(app: FastAPI):
     Code after yield runs on shutdown.
     """
     logger.info("Application starting up...")
-    # Future: initialise DB connection pool, cache warm-up, etc.
+    # Start pending reminder background scheduler (polling every 10s)
+    scheduler_task = asyncio.create_task(start_pending_reminder_scheduler(poll_interval_seconds=10))
     yield
-    # Future: close connections, flush message queues, etc.
     logger.info("Application shutting down...")
+    scheduler_task.cancel()
+    try:
+        await scheduler_task
+    except asyncio.CancelledError:
+        pass

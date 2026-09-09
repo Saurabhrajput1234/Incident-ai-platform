@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Follow-up Reminder ({{ reminder_count }}/{{ max_reminders }}) - {{ ticket_number }}</title>
+    <style>
+        body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; background-color: #f4f6f8; margin: 0; padding: 24px; color: #1e293b; }
+        .card { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.06); overflow: hidden; border: 1px solid #e2e8f0; }
+        .header { background: {% if is_final %}#b91c1c{% else %}#d97706{% endif %}; color: #ffffff; padding: 28px 24px; text-align: center; }
+        .header h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+        .badge { display: inline-block; background: rgba(255, 255, 255, 0.2); color: #ffffff; font-size: 13px; padding: 4px 14px; border-radius: 20px; margin-top: 10px; font-weight: 600; }
+        .content { padding: 28px 24px; line-height: 1.6; }
+        .greeting { font-size: 16px; font-weight: 600; color: #0f172a; margin-bottom: 12px; }
+        .alert-box { background: {% if is_final %}#fef2f2{% else %}#fffbeb{% endif %}; border: 1px solid {% if is_final %}#fecaca{% else %}#fde68a{% endif %}; border-radius: 8px; padding: 18px; margin: 20px 0; color: {% if is_final %}#991b1b{% else %}#92400e{% endif %}; }
+        .alert-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; color: {% if is_final %}#7f1d1d{% else %}#78350f{% endif %}; }
+        .details-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin: 20px 0; }
+        .details-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 14px; }
+        .details-row:last-child { border-bottom: none; }
+        .label { font-weight: 600; color: #64748b; }
+        .value { font-weight: 600; color: #0f172a; text-align: right; }
+        .status-pill { color: {% if is_final %}#b91c1c{% else %}#d97706{% endif %}; background: {% if is_final %}#fee2e2{% else %}#fef3c7{% endif %}; padding: 2px 10px; border-radius: 12px; font-size: 12px; }
+        .btn-container { text-align: center; margin-top: 24px; }
+        .btn { display: inline-block; background: {% if is_final %}#b91c1c{% else %}#d97706{% endif %}; color: #ffffff !important; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; }
+        .footer { background: #f1f5f9; padding: 18px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h1>⏰ {% if is_final %}Final Reminder (3/3){% else %}Pending Ticket Follow-up ({{ reminder_count }}/{{ max_reminders }}){% endif %}</h1>
+            <div class="badge">Ticket: {{ ticket_number }}</div>
+        </div>
+        <div class="content">
+            <div class="greeting">Hello {{ caller_name }},</div>
+            <p>This is a follow-up reminder regarding your incident <strong>{{ ticket_number }}</strong> (<em>"{{ short_description }}"</em>).</p>
+            
+            <div class="alert-box">
+                <div class="alert-title">{% if is_final %}⚠️ Final Action Required{% else %}Action Required / Clarification Needed{% endif %}</div>
+                Our support team is awaiting your response or additional details to continue working on this issue.
+                {% if is_final %}
+                Please note that this is the final reminder before this ticket may be automatically resolved or closed due to inactivity.
+                {% endif %}
+            </div>
+
+            <div class="details-box">
+                <div class="details-row"><span class="label">Ticket Number:</span> <span class="value">{{ ticket_number }}</span></div>
+                <div class="details-row"><span class="label">Short Description:</span> <span class="value">{{ short_description }}</span></div>
+                <div class="details-row"><span class="label">Assigned Engineer:</span> <span class="value">{{ assigned_engineer_name }}</span></div>
+                <div class="details-row"><span class="label">Assigned Group:</span> <span class="value">{{ assignment_group }}</span></div>
+                <div class="details-row"><span class="label">Current Status:</span> <span class="value status-pill">Pending User Response</span></div>
+            </div>
+
+            <p>Please reply to this notification or update your ticket in ServiceNow with the requested details so we can proceed with resolving your request.</p>
+
+            <div class="btn-container">
+                <a href="https://servicenow.corp.internal/nav_to.do?uri=incident.do?sys_id={{ ticket_number }}" class="btn">Update Ticket in Portal &rarr;</a>
+            </div>
+        </div>
+        <div class="footer">
+            &copy; 2026 Enterprise Incident AI Platform — Automated Ticket Follow-up
+        </div>
+    </div>
+</body>
+</html>

@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { incidentApi, triageApi, workNoteApi } from '../api/client'
+import { incidentApi, triageApi, workNoteApi, pendingApi } from '../api/client'
 import { PriorityBadge, StateBadge } from '../components/Badge'
 import Spinner from '../components/Spinner'
 import { ArrowLeft, Bot, RefreshCw, User, Clock, Tag, Server, Pencil, X, CheckCircle, MessageSquare, Plus } from 'lucide-react'
@@ -41,6 +41,15 @@ export default function IncidentDetail() {
     refetchInterval: 5000,
     enabled: !!id,
   })
+
+  // Pending cycle status — poll every 5s
+  const { data: cycleData } = useQuery({
+    queryKey: ['pending-cycle', id],
+    queryFn: () => pendingApi.getCycle(id),
+    refetchInterval: 5000,
+    enabled: !!id,
+  })
+  const activeCycle = cycleData?.cycle?.status === 'ACTIVE' ? cycleData.cycle : null
 
   // Only show popup when assigned_to transitions null → value AFTER initial load
   useEffect(() => {
@@ -85,31 +94,13 @@ export default function IncidentDetail() {
 
   const updateMut = useMutation({
     mutationFn: (data) => incidentApi.update(id, data),
-    onSuccess: async (updatedIncident) => {
+    onSuccess: async () => {
       setEditOpen(false)
-
-      // Step 1: Immediately refetch so UI shows the saved state (e.g. cleared assigned_to)
+      // Immediately refetch so UI reflects saved state
       await qc.refetchQueries({ queryKey: ['incident', id] })
       qc.invalidateQueries(['incidents'])
       qc.invalidateQueries(['work-notes', id])
-
-      // Step 2: If ticket is still active, run triage now (synchronously) so result
-      // is reflected immediately — don't wait for background task polling
-      if (updatedIncident.state === 'new' || updatedIncident.state === 'in_progress') {
-        try {
-          const triageRes = await triageApi.run(id)
-          // Refetch again to pick up any assignment changes from triage
-          await qc.refetchQueries({ queryKey: ['incident', id] })
-          qc.invalidateQueries(['incidents'])
-          qc.invalidateQueries(['work-notes', id])
-          // Show result banner
-          setTriageResult(triageRes)
-        } catch {
-          // Triage error — still refetch to show latest state
-          await qc.refetchQueries({ queryKey: ['incident', id] })
-          qc.invalidateQueries(['work-notes', id])
-        }
-      }
+      qc.invalidateQueries(['pending-cycle', id])
     },
   })
 
@@ -129,6 +120,7 @@ export default function IncidentDetail() {
       setNoteSourceType('USER')
       setAddNoteOpen(false)
       qc.invalidateQueries(['work-notes', id])
+      qc.invalidateQueries(['pending-cycle', id])
     } finally {
       setAddingNote(false)
     }
@@ -309,6 +301,13 @@ export default function IncidentDetail() {
             <dl className="space-y-2 text-sm">
               <Row icon={<Tag size={13} />} label="Priority"><PriorityBadge value={incident.priority} /></Row>
               <Row icon={<RefreshCw size={13} />} label="State"><StateBadge value={incident.state} /></Row>
+              {activeCycle && (
+                <Row icon={<Clock size={13} />} label="Pending Cycle">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                    Reminder {activeCycle.reminder_count}/{activeCycle.max_reminders} Active
+                  </span>
+                </Row>
+              )}
               <Row label="Category">{incident.category ?? '—'}</Row>
               <Row label="Subcategory">{incident.subcategory ?? '—'}</Row>
               <Row label="Impact">{mapImpact(incident.impact)}</Row>
