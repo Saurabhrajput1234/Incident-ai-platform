@@ -2,30 +2,14 @@
 Pydantic schemas for the Pending Agent domain.
 """
 from datetime import datetime, timezone
-from enum import Enum
-from pydantic import BaseModel, Field, ConfigDict
-from app.modules.agents.pending.models.pending_cycle import PendingCycleStatus
+from pydantic import BaseModel, Field
+from app.modules.pending_cycles.enums import PendingCycleStatus
 
 
 class PendingWorkNoteAnalysis(BaseModel):
     is_caller_action_required: bool
     reasoning: str
     confidence: float = 1.0
-
-
-class PendingCycleRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    incident_id: str
-    incident_number: str
-    status: PendingCycleStatus
-    reminder_count: int
-    max_reminders: int
-    source_type: str
-    next_reminder_at: datetime | None = None
-    created_at: datetime
-    updated_at: datetime
 
 
 class PendingResult(BaseModel):

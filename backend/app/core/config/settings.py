@@ -13,9 +13,10 @@ from app.core.config.database import DatabaseSettings
 from app.core.config.logging import LoggingSettings
 from app.core.config.security import SecuritySettings
 from app.core.config.ai import AISettings
+from app.core.config.notifications import NotificationSettings
 
 
-class Settings(AppSettings, DatabaseSettings, LoggingSettings, SecuritySettings, AISettings):
+class Settings(AppSettings, DatabaseSettings, LoggingSettings, SecuritySettings, AISettings, NotificationSettings):
     """Combined settings from all config modules."""
     pass
 

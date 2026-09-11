@@ -37,6 +37,13 @@ class WorkNoteRepository:
         )
         return result.scalars().all()
 
+    async def get_by_id(self, note_id: str) -> IncidentWorkNote | None:
+        """Fetch a single work note by primary key. Returns None if not found."""
+        result = await self.db.execute(
+            select(IncidentWorkNote).where(IncidentWorkNote.id == note_id)
+        )
+        return result.scalar_one_or_none()
+
     async def get_latest_by_incident(self, incident_id: str) -> IncidentWorkNote | None:
         result = await self.db.execute(
             select(IncidentWorkNote)

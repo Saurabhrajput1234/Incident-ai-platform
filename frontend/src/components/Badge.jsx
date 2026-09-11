@@ -8,7 +8,7 @@ const priorityConfig = {
 const stateConfig = {
   new:         { label: 'New',         class: 'bg-blue-100 text-blue-700 border border-blue-200' },
   in_progress: { label: 'Active',      class: 'bg-purple-100 text-purple-700 border border-purple-200' },
-  on_hold:     { label: 'On Hold',     class: 'bg-gray-100 text-gray-700 border border-gray-200' },
+  on_hold:     { label: 'Pending',     class: 'bg-gray-100 text-gray-700 border border-gray-200' },
   resolved:    { label: 'Resolved',    class: 'bg-green-100 text-green-700 border border-green-200' },
   closed:      { label: 'Closed',      class: 'bg-gray-200 text-gray-600 border border-gray-300' },
   cancelled:   { label: 'Cancelled',   class: 'bg-red-100 text-red-600 border border-red-200' },
