@@ -94,12 +94,15 @@ class AcknowledgementService:
             )
 
         # Write structured work note
+        # auto_activate=False: the state was intentionally set to on_hold above;
+        # this note must not undo that deliberate transition.
         await self.work_note_svc.add_note(
             incident_id=incident.id,
             message=note_msg,
             source_type=WorkNoteSourceType.ACKNOWLEDGEMENT_AGENT,
             source_name="AcknowledgementAgent",
             action_type=WorkNoteActionType.SEND_ACKNOWLEDGEMENT,
+            auto_activate=False,
         )
 
         # Auto-trigger Pending Agent when moved to on_hold/pending

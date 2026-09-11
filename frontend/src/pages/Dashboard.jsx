@@ -94,7 +94,7 @@ export default function Dashboard() {
             <KpiCard label="Total Incidents" value={stats?.total} icon={<AlertCircle size={20} className="text-blue-500" />} bg="bg-blue-50" />
             <KpiCard label="Active" value={stats?.active} icon={<TrendingUp size={20} className="text-purple-500" />} bg="bg-purple-50" />
             <KpiCard label="New" value={stats?.new} icon={<Clock size={20} className="text-yellow-500" />} bg="bg-yellow-50" />
-            <KpiCard label="On Hold" value={stats?.on_hold} icon={<Pause size={20} className="text-gray-500" />} bg="bg-gray-100" />
+            <KpiCard label="Pending" value={stats?.on_hold} icon={<Pause size={20} className="text-gray-500" />} bg="bg-gray-100" />
             <KpiCard label="Resolved" value={stats?.resolved} icon={<CheckCircle size={20} className="text-green-500" />} bg="bg-green-50" />
             <KpiCard label="Closed" value={stats?.closed} icon={<CheckCircle size={20} className="text-gray-400" />} bg="bg-gray-50" />
             <KpiCard label="Unassigned" value={stats?.unassigned} icon={<Users size={20} className="text-red-500" />} bg="bg-red-50" />
@@ -260,7 +260,7 @@ export default function Dashboard() {
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <KpiCard label="Total Processed" value={ackStats?.total_processed} icon={<Mail size={20} className="text-blue-500" />} bg="bg-blue-50" />
-                <KpiCard label="Moved to On Hold" value={ackStats?.on_hold_count} icon={<Pause size={20} className="text-orange-500" />} bg="bg-orange-50" sub="non-standard requests" />
+                <KpiCard label="Moved to Pending" value={ackStats?.on_hold_count} icon={<Pause size={20} className="text-orange-500" />} bg="bg-orange-50" sub="non-standard requests" />
                 {(ackStats?.template_breakdown ?? []).filter(t => t.count > 0).slice(0, 2).map(t => (
                   <KpiCard key={t.template} label={t.template} value={t.count}
                     icon={<CheckCircle size={20} style={{ color: t.color }} />} bg="bg-gray-50" />

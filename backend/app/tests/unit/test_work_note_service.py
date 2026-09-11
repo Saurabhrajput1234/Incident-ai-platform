@@ -46,6 +46,7 @@ async def test_add_note_returns_response(service):
         source_type=WorkNoteSourceType.TRIAGE_AGENT,
         source_name="TriageAgent",
         action_type=WorkNoteActionType.ASSIGN_ENGINEER,
+        auto_activate=False,  # unit test — isolation only
     )
 
     assert result.incident_id == "inc-1"
@@ -67,6 +68,7 @@ async def test_add_note_passes_correct_payload(service):
         source_name="Alice",
         source_id="eng-42",
         action_type=WorkNoteActionType.MANUAL_NOTE,
+        auto_activate=False,  # unit test — isolation only
     )
 
     call_kwargs = service.repo.create.call_args[0][0]

@@ -74,7 +74,7 @@ export default function IncidentList() {
           <option value="">All States</option>
           <option value="new">New</option>
           <option value="in_progress">Active</option>
-          <option value="on_hold">On Hold</option>
+          <option value="on_hold">Pending</option>
           <option value="resolved">Resolved</option>
           <option value="closed">Closed</option>
         </select>

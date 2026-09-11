@@ -88,12 +88,15 @@ class TriageService:
             )
 
             # Structured work note
+            # auto_activate=False: triage already set state via update_incident_internal;
+            # this note is a record of the group resolution, not a user communication.
             await self.work_note_svc.add_note(
                 incident_id=incident_id,
                 message=f"Assignment group resolved by AI to: {resolved}",
                 source_type=WorkNoteSourceType.TRIAGE_AGENT,
                 source_name="TriageAgent",
                 action_type=WorkNoteActionType.GROUP_RESOLVED,
+                auto_activate=False,
             )
             return resolved, True
 
@@ -158,6 +161,7 @@ class TriageService:
                 source_type=WorkNoteSourceType.TRIAGE_AGENT,
                 source_name="TriageAgent",
                 action_type=WorkNoteActionType.SYSTEM_NOTE,
+                auto_activate=False,  # failure audit note — no state activation
             )
             return AgentResponse(
                 success=False,
@@ -175,6 +179,7 @@ class TriageService:
                 source_type=WorkNoteSourceType.TRIAGE_AGENT,
                 source_name="TriageAgent",
                 action_type=WorkNoteActionType.SYSTEM_NOTE,
+                auto_activate=False,  # failure audit note — no state activation
             )
             return AgentResponse(
                 success=False,
@@ -207,6 +212,7 @@ class TriageService:
                 source_type=WorkNoteSourceType.TRIAGE_AGENT,
                 source_name="TriageAgent",
                 action_type=WorkNoteActionType.SYSTEM_NOTE,
+                auto_activate=False,  # assignment failure — no activation
             )
             agent_response.success = False
             agent_response.errors.append(NO_AVAILABLE_ENGINEER)
@@ -234,6 +240,7 @@ class TriageService:
                 source_name="TriageAgent",
                 source_id=eng.engineer_id,
                 action_type=WorkNoteActionType.ASSIGN_ENGINEER,
+                auto_activate=False,  # state already set to in_progress by update_incident_internal above
             )
 
             logger.info(f"[TriageService] {incident.incident_number} assigned to {eng.name}")
