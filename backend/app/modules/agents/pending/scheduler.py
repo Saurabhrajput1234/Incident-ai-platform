@@ -25,6 +25,12 @@ async def start_pending_reminder_scheduler(poll_interval_seconds: int = 20) -> N
         "[PendingScheduler] Background reminder scheduler started "
         "(polling every %ds)", poll_interval_seconds
     )
+
+    # Skip scheduler if no real DB is configured (e.g. during tests)
+    if not settings.DATABASE_URL.startswith("postgresql"):
+        logger.info("[PendingScheduler] Non-PostgreSQL DB detected, scheduler disabled.")
+        return
+
     engine = create_async_engine(settings.DATABASE_URL, future=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 

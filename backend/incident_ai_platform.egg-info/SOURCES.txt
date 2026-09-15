@@ -128,7 +128,10 @@ app/tests/unit/test_notification_service.py
 app/tests/unit/test_pending_agent.py
 app/tests/unit/test_pending_cycle_integration.py
 app/tests/unit/test_pending_cycle_service.py
+app/tests/unit/test_pending_resolution_workflow.py
 app/tests/unit/test_resolution_service.py
+app/tests/unit/test_resolution_source_eligibility.py
+app/tests/unit/test_resolution_strict_eligibility.py
 app/tests/unit/test_resolution_triggering_note.py
 app/tests/unit/test_work_note_activation.py
 app/tests/unit/test_work_note_service.py
