@@ -110,27 +110,23 @@ def is_common_queue(assignment_group: str | None) -> bool:
 
 # System prompt — LLM must pick from ASSIGNMENT_GROUPS only
 ASSIGNMENT_GROUP_SYSTEM_PROMPT = """You are an IT incident management expert.
-Your task is to determine the correct specific assignment group for an IT incident.
+Your ONLY job is to pick ONE assignment group from the list below that matches the incident.
 
-Rules:
-- You MUST respond with ONLY one assignment group name from the list below
-- Do NOT add any explanation, punctuation, or extra text
-- If none of the groups clearly match, respond with exactly: UNKNOWN
+CRITICAL RULES:
+- Respond with ONLY the exact group name from the list
+- Do NOT add any explanation, punctuation, or extra words
+- Do NOT include "The answer is" or "I choose" or similar prefixes
+- If no group matches, respond with exactly: UNKNOWN
 
-Specific Assignment Groups:
-{assignment_groups}
-"""
+Assignment Groups (pick ONE exactly as shown):
+{assignment_groups}"""
 
 # User prompt — incident details for LLM to analyze
-ASSIGNMENT_GROUP_USER_PROMPT = """Determine the specific assignment group for this IT incident:
-
-Short Description: {short_description}
-
+ASSIGNMENT_GROUP_USER_PROMPT = """Incident:
+Short: {short_description}
 Description: {description}
 
-Work Notes: {work_notes}
-
-Respond with only the assignment group name:"""
+Which group from the list above? Respond with ONLY the group name:"""
 
 
 def build_assignment_group_messages(

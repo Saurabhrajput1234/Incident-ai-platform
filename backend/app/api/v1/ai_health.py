@@ -12,11 +12,11 @@ router = APIRouter()
 @router.get("/ai-health", tags=["health"])
 async def ai_health_check():
     """
-    Test the Groq LLM connection by sending a simple ping message.
+    Test the Anthropic Claude LLM connection by sending a simple ping message.
     Returns model info and confirms the API key is working.
     """
-    if not settings.GROQ_API_KEY or settings.GROQ_API_KEY == "your_groq_api_key_here":
-        return {"status": "not_configured", "message": "GROQ_API_KEY is not set in .env"}
+    if not settings.ANTHROPIC_API_KEY or settings.ANTHROPIC_API_KEY == "your-anthropic-api-key-here":
+        return {"status": "not_configured", "message": "ANTHROPIC_API_KEY is not set in .env"}
 
     try:
         llm = LLMService()
@@ -24,9 +24,9 @@ async def ai_health_check():
             messages=[{"role": "user", "content": "Say 'OK' and nothing else."}],
             max_tokens=5,
         )
-        return {"status": "healthy", "model": settings.GROQ_MODEL, "response": response}
+        return {"status": "healthy", "model": settings.ANTHROPIC_MODEL, "response": response}
     except Exception as e:
-        return {"status": "unhealthy", "model": settings.GROQ_MODEL, "error": str(e)}
+        return {"status": "unhealthy", "model": settings.ANTHROPIC_MODEL, "error": str(e)}
 
 
 @router.get("/shift-status", tags=["health"])

@@ -68,14 +68,24 @@ class TriageService:
 
         try:
             raw = await self.llm.complete(messages=messages)
-            resolved = raw.strip().strip(".,!? \"'")
+            resolved = raw.strip().strip(".,!? \"'").strip()
             logger.info(f"LLM raw response: '{raw}' → stripped: '{resolved}'")
 
+            # Try exact match first (case-insensitive)
             groups_lower = {g.lower(): g for g in available_groups}
             canonical = groups_lower.get(resolved.lower())
 
+            # If no exact match, try to find partial match (Claude might add extra text)
+            if not canonical:
+                # Look for group names within the response (Claude might say "The answer is App Run-SAP - BASIS" etc)
+                for group in available_groups:
+                    if group.lower() in resolved.lower():
+                        canonical = group
+                        logger.info(f"Found group via substring match: '{group}' in '{resolved}'")
+                        break
+
             if resolved.upper() == "UNKNOWN" or not canonical:
-                logger.warning(f"LLM returned unrecognized group: '{resolved}'")
+                logger.warning(f"LLM returned unrecognized group: '{resolved}' | Available groups: {available_groups}")
                 return None, True
 
             resolved = canonical
