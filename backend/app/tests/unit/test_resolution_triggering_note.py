@@ -50,6 +50,8 @@ from app.modules.work_notes.enums import WorkNoteSourceType, WorkNoteActionType
 from app.modules.agents.resolution.service import ResolutionService
 from app.modules.agents.resolution.schemas import ResolutionTrigger, ResolutionAction, LLMAnalysis
 from app.modules.agents.base.response import AgentResponse
+from app.orchestrator.bus import event_bus
+from app.orchestrator.events import IncidentStateChangedEvent
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +75,19 @@ async def _create_incident(db, state: str = "on_hold") -> Incident:
 async def _reload_incident(db, incident_id: str) -> Incident:
     result = await db.execute(select(Incident).where(Incident.id == incident_id))
     return result.scalar_one()
+
+
+def _on_hold_state_events(mock_publish) -> list:
+    """Extract IncidentStateChangedEvents with previous_state==on_hold from publish calls."""
+    result = []
+    for c in mock_publish.call_args_list:
+        event = c.args[0] if c.args else None
+        if (
+            isinstance(event, IncidentStateChangedEvent)
+            and event.previous_state == "on_hold"
+        ):
+            result.append(event)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +395,7 @@ async def test_T6_no_trigger_when_already_active(db_session):
     inc = await _create_incident(db_session, state="in_progress")
     wn_svc = WorkNoteService(db_session)
 
-    with patch.object(IncidentService, "_fire_resolution_agent", new_callable=AsyncMock) as mock_fire:
+    with patch.object(event_bus, "publish", new_callable=AsyncMock) as mock_publish:
         await wn_svc.add_note(
             incident_id=inc.id,
             message="Still working on it.",
@@ -389,7 +404,8 @@ async def test_T6_no_trigger_when_already_active(db_session):
             auto_activate=True,
         )
 
-    mock_fire.assert_not_awaited()
+    on_hold_events = _on_hold_state_events(mock_publish)
+    assert len(on_hold_events) == 0
 
 
 @pytest.mark.anyio
@@ -398,10 +414,11 @@ async def test_T7_field_update_no_trigger(db_session):
     inc = await _create_incident(db_session, state="on_hold")
     inc_svc = IncidentService(db_session)
 
-    with patch.object(IncidentService, "_fire_resolution_agent", new_callable=AsyncMock) as mock_fire:
+    with patch.object(event_bus, "publish", new_callable=AsyncMock) as mock_publish:
         await inc_svc.update_incident(inc.id, IncidentUpdate(priority=IncidentPriority.HIGH))
 
-    mock_fire.assert_not_awaited()
+    on_hold_events = _on_hold_state_events(mock_publish)
+    assert len(on_hold_events) == 0
 
 
 # ===========================================================================
@@ -468,17 +485,13 @@ async def test_T9_triggering_note_not_found_falls_back_to_get_latest():
 async def test_integration_triggering_note_id_passed_to_trigger(db_session):
     """
     DB integration: when add_note causes ON_HOLD→ACTIVE,
-    _fire_resolution_agent is called with the user note's ID, not None.
+    the IncidentStateChangedEvent is published with the triggering_work_note_id
+    set to the user note's ID, not None.
     """
     inc = await _create_incident(db_session, state="on_hold")
     wn_svc = WorkNoteService(db_session)
 
-    captured_ids: list[str | None] = []
-
-    async def _capture(self, *, incident_id: str, triggering_work_note_id: str | None = None, triggering_work_note_source: str | None = None) -> None:  # noqa: N805
-        captured_ids.append(triggering_work_note_id)
-
-    with patch.object(IncidentService, "_fire_resolution_agent", _capture):
+    with patch.object(event_bus, "publish", new_callable=AsyncMock) as mock_publish:
         note = await wn_svc.add_note(
             incident_id=inc.id,
             message="Issue resolved! close the ticket.",
@@ -487,9 +500,10 @@ async def test_integration_triggering_note_id_passed_to_trigger(db_session):
             auto_activate=True,
         )
 
-    # The trigger must carry the ID of the ENGINEER note, not None
-    assert len(captured_ids) == 1
-    assert captured_ids[0] == note.id, (
-        f"Resolution trigger received triggering_work_note_id={captured_ids[0]!r} "
+    on_hold_events = _on_hold_state_events(mock_publish)
+    assert len(on_hold_events) == 1
+    published_event = on_hold_events[0]
+    assert published_event.triggering_work_note_id == note.id, (
+        f"IncidentStateChangedEvent.triggering_work_note_id={published_event.triggering_work_note_id!r} "
         f"but expected the ENGINEER note id={note.id!r}"
     )

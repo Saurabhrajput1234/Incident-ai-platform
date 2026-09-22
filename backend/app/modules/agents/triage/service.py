@@ -120,11 +120,11 @@ class TriageService:
         context_date: date | None = None,
         apply_recommendation: bool = True,
         force: bool = False,
-        auto_acknowledge: bool = True,
     ) -> AgentResponse:
         """
         Full triage flow.
         Pass force=True to re-assign even if an engineer is already set.
+        Acknowledgement is triggered by the event bus after assignment.
         """
         if context_date is None:
             context_date = datetime.now(timezone.utc).date()
@@ -230,14 +230,19 @@ class TriageService:
             return agent_response
 
         # Step 5: Update incident + structured work note
-        ack_data = None
         if apply_recommendation:
             eng = assignment.engineer
+
+            # Step 5a: Persist assigned_to FIRST (no state change, no event fired).
+            # This ensures ACK agent sees the correct engineer when it reads the incident.
             await self.incident_service.update_incident_internal(
                 incident.id,
-                IncidentUpdate(assigned_to=eng.name, state="in_progress"),
+                IncidentUpdate(assigned_to=eng.name),
+                changed_by="TRIAGE_AGENT",
             )
 
+            # Step 5b: Write ASSIGN_ENGINEER work note so it's committed before the
+            # state change event triggers AcknowledgementHandler concurrently.
             await self.work_note_svc.add_note(
                 incident_id=incident.id,
                 message=(
@@ -250,21 +255,22 @@ class TriageService:
                 source_name="TriageAgent",
                 source_id=eng.engineer_id,
                 action_type=WorkNoteActionType.ASSIGN_ENGINEER,
-                auto_activate=False,  # state already set to in_progress by update_incident_internal above
+                auto_activate=False,
+            )
+
+            # Step 5c: Now update state to in_progress — this publishes
+            # IncidentStateChangedEvent(→ in_progress, changed_by=TriageAgent)
+            # which triggers AcknowledgementHandler. At this point:
+            #   - assigned_to is already set in DB
+            #   - ASSIGN_ENGINEER work note is already committed
+            # So ACK sees a complete, correctly-ordered audit trail.
+            await self.incident_service.update_incident_internal(
+                incident.id,
+                IncidentUpdate(state="in_progress"),
+                changed_by="TRIAGE_AGENT",  # AcknowledgementHandler listens for this
             )
 
             logger.info(f"[TriageService] {incident.incident_number} assigned to {eng.name}")
-
-            if auto_acknowledge:
-                try:
-                    from app.modules.agents.acknowledgement.service import AcknowledgementService
-                    ack_service = AcknowledgementService(self.db)
-                    ack_resp = await ack_service.process_acknowledgement(incident.id)
-                    if ack_resp.success:
-                        ack_data = ack_resp.result
-                        logger.info(f"[TriageService] Auto-acknowledgement succeeded for {incident.incident_number}")
-                except Exception as e:
-                    logger.error(f"[TriageService] Auto-acknowledgement failed: {e}")
 
         triage_result = TriageResult(**agent_response.result)
         eng = assignment.engineer
@@ -280,7 +286,6 @@ class TriageService:
                 "fallback_used": assignment.fallback_used,
             },
             "llm_resolved_group": llm_used,
-            "acknowledgement": ack_data,
         }
 
         return agent_response

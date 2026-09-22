@@ -36,3 +36,4 @@ async def shift_status():
     Use this to verify the shift time checker is working correctly.
     """
     return {"status": "ok", "shifts": get_shift_status_summary()}
+

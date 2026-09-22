@@ -40,14 +40,16 @@ async def test_add_note_returns_response(service):
     note = _make_note()
     service.repo.create.return_value = note
 
-    result = await service.add_note(
-        incident_id="inc-1",
-        message="Assigned to Alice",
-        source_type=WorkNoteSourceType.TRIAGE_AGENT,
-        source_name="TriageAgent",
-        action_type=WorkNoteActionType.ASSIGN_ENGINEER,
-        auto_activate=False,  # unit test — isolation only
-    )
+    with patch.object(service, "_get_incident_state_and_number", return_value=("on_hold", "INC0000001")), \
+         patch.object(service, "_publish_work_note_event", new=AsyncMock()):
+        result = await service.add_note(
+            incident_id="inc-1",
+            message="Assigned to Alice",
+            source_type=WorkNoteSourceType.TRIAGE_AGENT,
+            source_name="TriageAgent",
+            action_type=WorkNoteActionType.ASSIGN_ENGINEER,
+            auto_activate=False,  # unit test — isolation only
+        )
 
     assert result.incident_id == "inc-1"
     assert result.source_type == WorkNoteSourceType.TRIAGE_AGENT.value
@@ -61,15 +63,17 @@ async def test_add_note_passes_correct_payload(service):
     note = _make_note(source_id="eng-42")
     service.repo.create.return_value = note
 
-    await service.add_note(
-        incident_id="inc-1",
-        message="Test",
-        source_type=WorkNoteSourceType.ENGINEER,
-        source_name="Alice",
-        source_id="eng-42",
-        action_type=WorkNoteActionType.MANUAL_NOTE,
-        auto_activate=False,  # unit test — isolation only
-    )
+    with patch.object(service, "_get_incident_state_and_number", return_value=("on_hold", "INC0000001")), \
+         patch.object(service, "_publish_work_note_event", new=AsyncMock()):
+        await service.add_note(
+            incident_id="inc-1",
+            message="Test",
+            source_type=WorkNoteSourceType.ENGINEER,
+            source_name="Alice",
+            source_id="eng-42",
+            action_type=WorkNoteActionType.MANUAL_NOTE,
+            auto_activate=False,  # unit test — isolation only
+        )
 
     call_kwargs = service.repo.create.call_args[0][0]
     assert call_kwargs["incident_id"] == "inc-1"

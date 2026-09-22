@@ -3,21 +3,19 @@
 """
 Incident REST API endpoints.
 
-All routes delegate to IncidentService — no business logic here.
-Auto-triggers Triage Agent after incident creation (background task).
+All routes delegate to IncidentService.
+Agent triggering is handled by the event-driven orchestration layer — not here.
 """
-import asyncio
 import csv
 import io
 import logging
-from fastapi import APIRouter, Depends, Query, UploadFile, File, status, BackgroundTasks
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from fastapi import APIRouter, Depends, Query, UploadFile, File, status
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.postgres.session import get_db
 from app.modules.incidents.service import IncidentService
 from app.modules.incidents.schemas import (
     IncidentCreate, IncidentUpdate, IncidentResponse, IncidentListResponse
 )
-from app.core.config import settings
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 logger = logging.getLogger(__name__)
@@ -27,58 +25,26 @@ def get_service(db: AsyncSession = Depends(get_db)) -> IncidentService:
     return IncidentService(db)
 
 
-async def _auto_triage(incident_id: str) -> None:
-    """
-    Background task: triggers triage agent after incident creation.
-    Uses its own DB session since background tasks run outside the request session.
-    """
-    from app.modules.agents.triage.service import TriageService
-
-    engine = create_async_engine(settings.DATABASE_URL, future=True)
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    try:
-        async with session_factory() as db:
-            triage = TriageService(db)
-            response = await triage.run_triage(incident_id=incident_id)
-            if response.success:
-                logger.info(f"[Auto-Triage] {incident_id} triaged successfully")
-            else:
-                logger.warning(f"[Auto-Triage] {incident_id} triage failed: {response.errors}")
-    except Exception as e:
-        logger.error(f"[Auto-Triage] {incident_id} error: {e}")
-    finally:
-        await engine.dispose()
-
-
 @router.post("", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
 async def create_incident(
     payload: IncidentCreate,
-    background_tasks: BackgroundTasks,
     service: IncidentService = Depends(get_service),
 ):
     """
     Create a new incident.
-    Automatically triggers the Triage Agent in the background after creation.
+    The orchestration layer automatically triggers the Triage Agent via event bus.
     """
-    incident = await service.create_incident(payload)
-    background_tasks.add_task(_auto_triage, incident.id)
-    return incident
+    return await service.create_incident(payload)
 
 
 @router.post("/bulk-import", status_code=status.HTTP_200_OK)
 async def bulk_import_incidents(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="CSV file with incident rows"),
     service: IncidentService = Depends(get_service),
 ):
     """
     Bulk import incidents from a CSV file.
-    Each row creates one incident and queues triage automatically.
-    Required column: short_description
-    Optional: description, priority, state, category, subcategory, impact, urgency,
-              assignment_group, assigned_to, caller, configuration_item,
-              business_service, environment, source, work_notes
+    Each row creates one incident and the event bus queues triage automatically.
     """
     content = await file.read()
     text = content.decode("utf-8-sig")
@@ -115,7 +81,6 @@ async def bulk_import_incidents(
                 work_notes=_get(row, "work_notes", "Work Notes"),
             )
             incident = await service.create_incident(payload)
-            background_tasks.add_task(_auto_triage, incident.id)
             created.append({
                 "row": i,
                 "incident_number": incident.incident_number,
@@ -124,6 +89,14 @@ async def bulk_import_incidents(
             })
         except Exception as e:
             failed.append({"row": i, "error": str(e)})
+
+    return {
+        "total_rows": len(created) + len(failed),
+        "created": len(created),
+        "failed": len(failed),
+        "incidents": created,
+        "errors": failed,
+    }
 
     return {
         "total_rows": len(created) + len(failed),

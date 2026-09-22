@@ -9,17 +9,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.core.logging import logger
 from app.modules.agents.pending.scheduler import start_pending_reminder_scheduler
+from app.orchestrator.bus import event_bus
+from app.orchestrator.registry import register_all_handlers
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    FastAPI lifespan context manager.
-    Code before yield runs on startup.
-    Code after yield runs on shutdown.
-    """
     logger.info("Application starting up...")
-    # Start pending reminder background scheduler (polling every 10s)
+    register_all_handlers(event_bus)
     scheduler_task = asyncio.create_task(start_pending_reminder_scheduler(poll_interval_seconds=10))
     yield
     logger.info("Application shutting down...")

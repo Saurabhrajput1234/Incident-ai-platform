@@ -352,12 +352,13 @@ async def test_pending_service_work_note_uses_work_note_service():
 
     await svc.process_pending_transition(incident_id="inc-123", force_reminder=True)
 
-    # add_note was called via WorkNoteService (not bypassed)
-    svc.work_note_svc.add_note.assert_called_once()
-    kwargs = svc.work_note_svc.add_note.call_args.kwargs
-    assert kwargs["incident_id"] == "inc-123"
-    assert kwargs["source_type"] == WorkNoteSourceType.PENDING_AGENT
-    assert kwargs["action_type"] == WorkNoteActionType.SEND_REMINDER
+    # add_note was called twice: SEND_REMINDER + STATE_CHANGE (restore to on_hold)
+    assert svc.work_note_svc.add_note.call_count == 2
+    # First call must be the SEND_REMINDER
+    first_call_kwargs = svc.work_note_svc.add_note.call_args_list[0].kwargs
+    assert first_call_kwargs["incident_id"] == "inc-123"
+    assert first_call_kwargs["source_type"] == WorkNoteSourceType.PENDING_AGENT
+    assert first_call_kwargs["action_type"] == WorkNoteActionType.SEND_REMINDER
 
 
 # ------ Test: two-note analysis (regression from original tests) ------

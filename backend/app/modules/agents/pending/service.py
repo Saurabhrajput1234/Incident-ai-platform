@@ -92,11 +92,15 @@ class PendingService:
         self,
         incident_id: str,
         force_reminder: bool = False,
+        changed_by: str = "system",
     ) -> AgentResponse:
         """
         Called in two situations:
 
         1. force_reminder=False (default) — incident just entered pending state.
+           • If changed_by == ENGINEER: check if engineer added a substantive work note
+             BEFORE the state change. If yes, analyze it. Create cycle only if user
+             response is required. If no prior engineer note → skip cycle creation.
            • If an active cycle already exists: preserve it (idempotency).
            • Otherwise: create cycle + schedule Reminder 1 (do NOT send yet).
 
@@ -116,9 +120,38 @@ class PendingService:
             )
             if incident.state not in ("on_hold", "pending"):
                 await self.incident_service.update_incident_internal(
-                    incident.id, IncidentUpdate(state="on_hold")
+                    incident.id, IncidentUpdate(state="on_hold"), changed_by="PENDING_AGENT"
                 )
             return self._preserved_response(incident, existing_cycle)
+
+        # ------------------------------------------------------------------
+        # Path A2: Engineer-triggered → analyse prior work note first
+        # Only create a cycle if the engineer's note indicates user response needed.
+        # ------------------------------------------------------------------
+        if not existing_cycle and not force_reminder and changed_by == "ENGINEER":
+            should_create = await self._should_create_cycle_for_engineer(incident)
+            if not should_create:
+                logger.info(
+                    "[PendingService] %s — Engineer set on_hold but no substantive "
+                    "work note or user response not required. Skipping cycle creation.",
+                    incident.incident_number,
+                )
+                res = PendingResult(
+                    incident_id=incident.id,
+                    incident_number=incident.incident_number,
+                    caller=incident.caller,
+                    assigned_to=incident.assigned_to,
+                    assignment_group=incident.assignment_group,
+                    is_caller_action_required=False,
+                    action_taken="SKIPPED_NO_USER_ACTION_REQUIRED",
+                    email_sent=False,
+                )
+                return AgentResponse(
+                    success=True,
+                    agent_name="PendingAgent",
+                    reasoning="Engineer set on_hold without a user-directed work note. No pending cycle created.",
+                    result=res.model_dump(),
+                )
 
         # ------------------------------------------------------------------
         # Path B: Schedule Reminder 1 (no active cycle, force_reminder=False)
@@ -130,6 +163,85 @@ class PendingService:
         # Path C: Execute a scheduled reminder (force_reminder=True)
         # ------------------------------------------------------------------
         return await self._execute_reminder(incident, existing_cycle)
+
+    # ------------------------------------------------------------------
+    # Private: Path A2 — engineer work note analysis
+    # ------------------------------------------------------------------
+
+    async def _should_create_cycle_for_engineer(self, incident) -> bool:
+        """
+        When an engineer manually sets the incident to on_hold, decide if a
+        pending reminder cycle is needed.
+
+        Logic:
+        1. Fetch recent work notes for this incident.
+        2. Find the most recent ENGINEER MANUAL_NOTE or ASSIGN_ENGINEER note
+           that was written BEFORE the STATE_CHANGE note.
+        3. If no such note exists → engineer just changed state without context → skip.
+        4. If found → run LLM analysis on that note's content.
+        5. Return True only if LLM says user response is required.
+        """
+        all_notes = await self.work_note_svc.get_notes(incident_id=incident.id, limit=20)
+
+        # Notes are ordered desc (newest first).
+        # Find the STATE_CHANGE note written by the engineer (most recent one),
+        # then look for the MANUAL_NOTE immediately before it.
+        state_change_idx = None
+        for i, note in enumerate(all_notes):
+            src = note.source_type if isinstance(note.source_type, str) else note.source_type.value
+            act = note.action_type if isinstance(note.action_type, str) else (note.action_type.value if note.action_type else "")
+            if src == WorkNoteSourceType.ENGINEER.value and act == WorkNoteActionType.STATE_CHANGE.value:
+                state_change_idx = i
+                break
+
+        if state_change_idx is None:
+            # No state change note found — no context to analyse
+            return False
+
+        # Look at notes AFTER the state change note in the desc-ordered list
+        # (i.e. notes written BEFORE the state change chronologically)
+        prior_notes = all_notes[state_change_idx + 1:]
+
+        # Find the most recent substantive ENGINEER note before the state change
+        engineer_note = None
+        for note in prior_notes:
+            src = note.source_type if isinstance(note.source_type, str) else note.source_type.value
+            act = note.action_type if isinstance(note.action_type, str) else (note.action_type.value if note.action_type else "")
+            if src == WorkNoteSourceType.ENGINEER.value and act in (
+                WorkNoteActionType.MANUAL_NOTE.value,
+                WorkNoteActionType.ASSIGN_ENGINEER.value,
+                WorkNoteActionType.SYSTEM_NOTE.value,
+            ):
+                engineer_note = note
+                break
+
+        if engineer_note is None:
+            # Engineer changed state without any prior substantive note → no cycle
+            logger.info(
+                "[PendingService] %s — No prior engineer work note found before state change. Skipping cycle.",
+                incident.incident_number,
+            )
+            return False
+
+        # Analyse the note content via LLM
+        incident_context_str = (
+            f"Ticket: {incident.incident_number} | "
+            f"Title: {incident.short_description} | "
+            f"Description: {incident.description or incident.short_description} | "
+            f"Assigned: {incident.assigned_to} ({incident.assignment_group})"
+        )
+        analysis = await self.analyzer.analyze(
+            latest_work_note=engineer_note.message,
+            source_name=engineer_note.source_name,
+            incident_context=incident_context_str,
+        )
+
+        logger.info(
+            "[PendingService] %s — Engineer note analysis: user_required=%s confidence=%.2f reasoning=%s",
+            incident.incident_number, analysis.is_caller_action_required,
+            analysis.confidence, analysis.reasoning,
+        )
+        return analysis.is_caller_action_required
 
     # ------------------------------------------------------------------
     # Private: Path B — schedule Reminder 1
@@ -164,7 +276,7 @@ class PendingService:
         # Ensure incident stays in on_hold while waiting.
         if incident.state not in ("on_hold", "pending"):
             await self.incident_service.update_incident_internal(
-                incident.id, IncidentUpdate(state="on_hold")
+                incident.id, IncidentUpdate(state="on_hold"), changed_by="PENDING_AGENT"
             )
 
         res = PendingResult(
@@ -404,16 +516,33 @@ class PendingService:
 
         # ------------------------------------------------------------------
         # 4. Add work note via WorkNoteService.
-        #    auto_activate=True is intentional: WorkNoteService's existing
-        #    ON_HOLD → ACTIVE behavior must NOT be suppressed.
+        #    auto_activate=True: the reminder note triggers the standard
+        #    ON_HOLD → IN_PROGRESS auto-activation (state bounce).
+        #    This is intentional — it shows activity on the incident.
+        #    The Pending Agent then explicitly restores ON_HOLD in step 5.
         # ------------------------------------------------------------------
+        if cycle_completed:
+            follow_up_status = (
+                f"All {cycle.max_reminders} reminders sent. "
+                f"No further automated reminders will be sent. "
+                f"Manual engineer follow-up required."
+            )
+        else:
+            next_reminder_info = (
+                cycle.next_reminder_at.strftime("%Y-%m-%d %H:%M UTC")
+                if cycle.next_reminder_at else "scheduled"
+            )
+            follow_up_status = (
+                f"Awaiting user response. "
+                f"Next reminder ({reminder_tier + 1}/{cycle.max_reminders}) "
+                f"scheduled at {next_reminder_info}."
+            )
+
         note_msg = (
             f"Pending Agent: Reminder {reminder_tier} of {cycle.max_reminders} sent to user.\n"
             f"• Cycle ID: {cycle.id}\n"
             f"• Awaiting from User: {awaiting_detail}\n"
-            f"• Follow-up Status: "
-            f"{'Cycle Max Reminders Sent' if cycle_completed else 'Awaiting User Response'}\n"
-            f"• State: Maintained in Pending\n\n"
+            f"• Follow-up Status: {follow_up_status}\n\n"
             f"==================== EMAIL SENT TO USER ====================\n"
             f"{email_text}\n"
             f"============================================================"
@@ -425,18 +554,45 @@ class PendingService:
             source_type=WorkNoteSourceType.PENDING_AGENT,
             source_name="PENDING AGENT",
             action_type=WorkNoteActionType.SEND_REMINDER,
+            auto_activate=True,  # Intentional: triggers on_hold → in_progress to show activity
         )
 
         # ------------------------------------------------------------------
-        # 5. Return incident to ON_HOLD.
-        #    WorkNoteService may have auto-activated the incident
-        #    (ON_HOLD → ACTIVE/IN_PROGRESS).  Explicitly restore ON_HOLD now.
+        # 5. Restore ON_HOLD after the reminder-driven activation.
+        #    auto_activate=True above moves incident to in_progress.
+        #    Pending Agent explicitly moves it back to on_hold here.
+        #    Use changed_by="PENDING_AGENT" so PendingHandler skips this event
+        #    and does NOT create a new cycle.
+        #    This applies for ALL reminders (including final) — incident stays
+        #    on_hold after cycle completes, awaiting manual engineer action.
         # ------------------------------------------------------------------
         await self.incident_service.update_incident_internal(
-            incident.id, IncidentUpdate(state="on_hold")
+            incident.id,
+            IncidentUpdate(state="on_hold"),
+            changed_by="PENDING_AGENT",  # PendingHandler ignores this source
+        )
+
+        restore_msg = (
+            f"Pending Agent: State restored to On Hold after reminder {reminder_tier} sent.\n"
+            f"• Transition: In Progress → On Hold\n"
+            + (
+                f"• All {cycle.max_reminders} reminders exhausted. "
+                f"Cycle {cycle.id} complete. Manual engineer follow-up required."
+                if cycle_completed else
+                f"• Next reminder ({reminder_tier + 1}/{cycle.max_reminders}) scheduled. "
+                f"Awaiting caller response."
+            )
+        )
+        await self.work_note_svc.add_note(
+            incident_id=incident.id,
+            message=restore_msg,
+            source_type=WorkNoteSourceType.PENDING_AGENT,
+            source_name="PENDING AGENT",
+            action_type=WorkNoteActionType.STATE_CHANGE,
+            auto_activate=False,  # Do not bounce again
         )
         logger.info(
-            "[PendingService] Reminder %d/%d sent for %s. Incident returned to on_hold.",
+            "[PendingService] Reminder %d/%d sent for %s. State restored to on_hold.",
             reminder_tier, cycle.max_reminders, incident.incident_number,
         )
 
@@ -448,7 +604,7 @@ class PendingService:
             assignment_group=incident.assignment_group,
             cycle_id=cycle.id,
             cycle_status=PendingCycleStatus.COMPLETED if cycle_completed else PendingCycleStatus.ACTIVE,
-            reminder_count=reminder_tier,  # the reminder that was just sent
+            reminder_count=reminder_tier,
             max_reminders=existing_cycle.max_reminders,
             is_caller_action_required=True,
             action_taken="CYCLE_COMPLETED" if cycle_completed else "REMINDER_SENT",
@@ -462,7 +618,11 @@ class PendingService:
             agent_name="PendingAgent",
             reasoning=(
                 f"Reminder {reminder_tier} of {cycle.max_reminders} sent. "
-                f"Ticket returned to ON_HOLD."
+                + (
+                    "All reminders exhausted. Incident remains ON_HOLD — manual engineer action required."
+                    if cycle_completed else
+                    "Incident returned to ON_HOLD. Awaiting caller response."
+                )
             ),
             confidence=analysis.confidence,
             result=res.model_dump(),

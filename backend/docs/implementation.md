@@ -6,7 +6,7 @@
 
 Production-ready AI Incident Management Platform built with FastAPI.
 Uses Clean Architecture: API → Service → Repository → PostgreSQL.
-AI agents receive structured context objects — never direct DB access.
+AI agents are coordinated by an **in-process event-driven orchestration layer** — no direct calls between agents.
 
 ---
 
@@ -62,159 +62,83 @@ backend/
 │   │
 │   ├── api/
 │   │   ├── router.py                      Registers all versioned sub-routers
-│   │   ├── dependencies.py                Shared API dependencies (placeholder)
+│   │   ├── dependencies.py                Shared API dependencies
 │   │   └── v1/
 │   │       ├── health.py                  GET /v1/health — app liveness
 │   │       ├── db_health.py               GET /v1/db-health — PostgreSQL connectivity
-│   │       ├── ai_health.py               GET /v1/ai-health — Groq LLM test
+│   │       ├── ai_health.py               GET /v1/ai-health — Anthropic LLM test
 │   │       │                              GET /v1/shift-status — current active shifts
-│   │       ├── incidents.py               Incident CRUD + auto-triggers triage on create
+│   │       ├── incidents.py               Incident CRUD — event bus handles agent triggers
 │   │       ├── shift_roster.py            Roster upload, engineer management APIs
-│   │       └── triage.py                  POST /v1/triage/{id} — run triage
+│   │       └── triage.py                  POST /v1/triage/{id} — manual triage trigger
 │   │                                      GET  /v1/triage/{id}/context — preview AIContext
 │   │
 │   ├── core/
-│   │   ├── config/
-│   │   │   ├── __init__.py                Exports single `settings` instance
-│   │   │   ├── app.py                     APP_NAME, VERSION, CORS, API prefix
-│   │   │   ├── database.py                DATABASE_URL
-│   │   │   ├── logging.py                 LOG_LEVEL
-│   │   │   ├── security.py                SECRET_KEY, JWT config
-│   │   │   ├── ai.py                      GROQ_API_KEY, GROQ_MODEL, temperature
-│   │   │   └── settings.py                Merges all config classes → settings singleton
-│   │   ├── lifecycle.py                   Startup/shutdown events (lifespan)
-│   │   ├── logging.py                     Logger setup (stdout, format, level)
-│   │   └── middleware.py                  CORS middleware registration
+│   │   ├── config/                        App, DB, logging, security, AI settings
+│   │   ├── lifecycle.py                   Startup: registers event handlers + starts scheduler
+│   │   ├── logging.py                     Logger setup
+│   │   └── middleware.py                  CORS middleware
 │   │
-│   ├── common/
-│   │   ├── constants/app.py               DEFAULT_PAGE_SIZE, date format constants
-│   │   ├── enums/base.py                  Environment, Status enums
-│   │   ├── exceptions/
-│   │   │   ├── base.py                    NotFoundError, BadRequestError, etc.
-│   │   │   └── handlers.py                HTTP/validation/500 exception handlers
-│   │   ├── responses/base.py              SuccessResponse[T], ErrorResponse
-│   │   ├── schemas/pagination.py          PaginationParams, PaginatedResponse[T]
-│   │   ├── utils/datetime.py              utcnow(), format_datetime()
-│   │   ├── utils/uuid.py                  generate_uuid(), is_valid_uuid()
-│   │   └── validators/common.py           is_valid_email(), is_non_empty_string()
-│   │
-│   ├── database/
-│   │   └── postgres/
-│   │       ├── base.py                    SQLAlchemy declarative Base (all models inherit)
-│   │       └── session.py                 Async engine, session factory, get_db() dependency
+│   ├── orchestrator/                      ← Event-Driven Orchestration Layer
+│   │   ├── bus.py                         EventBus class + event_bus singleton
+│   │   ├── events.py                      IncidentCreatedEvent, IncidentStateChangedEvent, WorkNoteAddedEvent
+│   │   ├── registry.py                    Wires all handlers to bus (called once at startup)
+│   │   └── handlers/
+│   │       ├── triage.py                  IncidentCreatedEvent(state=new) → TriageService
+│   │       ├── acknowledgement.py         IncidentStateChangedEvent(→in_progress, by=TriageAgent) → AcknowledgementService
+│   │       ├── pending.py                 IncidentStateChangedEvent(→on_hold, not by PendingAgent) → PendingService
+│   │       └── resolution.py             IncidentStateChangedEvent(on_hold→in_progress, source=USER) → ResolutionService
 │   │
 │   ├── modules/
-│   │   │
 │   │   ├── incidents/
 │   │   │   ├── enums.py                   Priority, State, Category, Impact, Urgency, Source enums
-│   │   │   ├── model.py                   SQLAlchemy Incident model (incidents table)
-│   │   │   ├── schemas.py                 IncidentCreate, IncidentUpdate, IncidentResponse, IncidentListResponse
-│   │   │   ├── repository.py              All SQL queries: create, get, list, update, delete, search
-│   │   │   └── service.py                 Business logic: create, get (by ID or INC number), list, update, delete, search
+│   │   │   ├── model.py                   SQLAlchemy Incident model
+│   │   │   ├── schemas.py                 IncidentCreate, IncidentUpdate, IncidentResponse
+│   │   │   ├── repository.py              All SQL queries
+│   │   │   └── service.py                 Business logic + publishes IncidentCreatedEvent / IncidentStateChangedEvent
 │   │   │
-│   │   ├── shift_roster/
-│   │   │   ├── enums.py                   ShiftCode, EngineerLevel, EngineerStatus, UploadStatus, SHIFT_DEFINITIONS, WORKING_SHIFTS
-│   │   │   ├── model.py                   4 SQLAlchemy models: ShiftRosterUpload, Engineer, ShiftRoster, ShiftRosterHistory
-│   │   │   ├── schemas.py                 UploadSummary, EngineerResponse, ShiftRosterResponse, EngineerAvailability, etc.
-│   │   │   ├── parser.py                  parse_excel() + parse_csv() → ParsedRoster (reads Day1..Day31 columns)
-│   │   │   ├── repository.py              DB operations: upsert engineers, bulk insert roster, round-robin queries
-│   │   │   ├── service.py                 Business logic: upload, search, get_available_engineers, update, history
-│   │   │   ├── shift_time_checker.py      is_shift_active_now() — checks if shift window is active by current time/timezone
-│   │   │   └── validator.py               File validation utilities
+│   │   ├── work_notes/
+│   │   │   ├── enums.py                   WorkNoteSourceType, WorkNoteActionType
+│   │   │   ├── model.py                   IncidentWorkNote SQLAlchemy model
+│   │   │   ├── schemas.py                 WorkNoteCreate, WorkNoteResponse
+│   │   │   ├── repository.py              DB queries for work notes
+│   │   │   └── service.py                 add_note() — persists note, publishes WorkNoteAddedEvent, handles auto-activation
 │   │   │
-│   │   ├── context/
-│   │   │   ├── __init__.py
-│   │   │   ├── schemas.py                 IncidentContext, EngineerContext, AIContext — data contract for agents
-│   │   │   ├── builder.py                 build_context() — assembles AIContext from incident + engineers (no AI, no DB)
-│   │   │   ├── service.py                 ContextService.build_for_incident() — fetches data, calls builder
-│   │   │   └── exceptions.py              ContextBuildError
+│   │   ├── pending_cycles/
+│   │   │   ├── model.py                   PendingCycle SQLAlchemy model
+│   │   │   ├── repository.py              get_due_active_cycles(), CRUD
+│   │   │   └── service.py                 create_cycle_if_not_exists(), increment_reminder(), complete_cycle(), cancel_active_cycle()
+│   │   │
+│   │   ├── shift_roster/                  ShiftRosterUpload, Engineer, ShiftRoster, ShiftRosterHistory
+│   │   ├── context/                       AIContext builder — incident + engineer context for agents
 │   │   │
 │   │   └── agents/
-│   │       ├── __init__.py
-│   │       ├── base/
-│   │       │   ├── base_agent.py          Abstract BaseAgent — validate_context(), run(), reason() lifecycle
-│   │       │   ├── context.py             Helper utils: get_available_engineers(), get_engineers_by_level()
-│   │       │   ├── request.py             AgentRequest(context: AIContext)
-│   │       │   ├── response.py            AgentResponse(success, reasoning, confidence, result, errors)
-│   │       │   └── exceptions.py          ContextValidationError, AgentReasoningError
-│   │       │
-│   │       └── triage/
-│   │           ├── agent.py               TriageAgent — validates context, confirms assignment group, counts availability
-│   │           ├── service.py             TriageService — orchestrates: LLM group resolve → context → agent → assignment → update
-│   │           ├── assignment_service.py  AssignmentService — persistent round-robin engineer selection (DB-backed, concurrency safe)
-│   │           ├── prompts.py             ASSIGNMENT_GROUPS list, KEYWORD_MAPPING, LLM prompt builder
-│   │           ├── schemas.py             EngineerRecommendation, TriageResult
-│   │           ├── models.py              AssignmentGroupRRState, AssignmentHistory (DB models)
-│   │           └── round_robin.py         In-memory round-robin fallback (superseded by DB-backed AssignmentService)
-│   │       │
-│   │       ├── acknowledgement/
-│   │           ├── agent.py               AcknowledgementAgent — LLM-based intent classification
-│   │           ├── service.py             AcknowledgementService — classifies incident, renders email, sends to caller, auto-triggers Pending
-│   │           ├── template_renderer.py   Renders HTML/plain-text email templates
-│   │           └── schemas.py             IntentType, AcknowledgementResult
-│   │       │
-│   │       ├── pending/
-│   │           ├── agent.py               PendingAgent — base agent (minimal logic)
-│   │           ├── service.py             PendingService — manages reminder cycle lifecycle, schedules reminders
-│   │           ├── scheduler.py           Background task: polls for due reminders every 10s, fires them
-│   │           ├── reminder_renderer.py   Renders context-aware reminder emails
-│   │           ├── work_note_analyzer.py  Analyzes work notes for LLM context
-│   │           └── schemas.py             PendingResult, PendingCycleStatus
-│   │       │
-│   │       └── resolution/
-│   │           ├── agent.py               ResolutionAgent — LLM-based response intent classification
-│   │           ├── service.py             ResolutionService — analyzes user response, sends notifications, auto-resolves if eligible
-│   │           ├── schemas.py             ResolutionIntent, ResolutionTrigger, ResolutionResult
-│   │           └── models.py              (no DB models — uses existing pending_cycles, work_notes)
+│   │       ├── base/                      BaseAgent, AgentRequest, AgentResponse
+│   │       ├── triage/                    TriageAgent + TriageService + AssignmentService
+│   │       ├── acknowledgement/           AcknowledgementAgent + AcknowledgementService + TemplateRenderer
+│   │       ├── pending/                   PendingAgent + PendingService + Scheduler + ReminderRenderer
+│   │       └── resolution/                ResolutionAgent + ResolutionService + NotificationService
 │   │
 │   ├── ai_platform/
-│   │   ├── llm/
-│   │   │   └── groq_client.py             Shared AsyncGroq client singleton
-│   │   ├── services/
-│   │   │   └── llm_service.py             LLMService.complete() — shared LLM call used by any agent
-│   │   └── tools/
-│   │       ├── base_tool.py               BaseTool ABC + ToolResult — all tools inherit from this
-│   │       ├── incident_tool.py            Placeholder — agent access to IncidentService (future)
-│   │       ├── shift_roster_tool.py        Placeholder — agent access to ShiftRosterService (future)
-│   │       └── knowledge_tool.py           Placeholder — knowledge base tool (future)
+│   │   ├── llm/anthropic_client.py        Singleton AsyncAnthropic client
+│   │   └── services/llm_service.py        LLMService.complete() — used by all four agents
 │   │
 │   ├── integrations/
-│   │   ├── servicenow/                    Placeholder — ServiceNow repository swap (future)
-│   │   ├── teams/                         Placeholder — MS Teams notifications (future)
-│   │   ├── email/                         Placeholder — email notifications (future)
-│   │   └── cmdb/                          Placeholder — CMDB integration (future)
-│   │
-│   ├── platform/
-│   │   ├── caching/                       Placeholder — Redis cache (future)
-│   │   ├── events/                        Placeholder — event bus (future)
-│   │   ├── messaging/                     Placeholder — message queue (future)
-│   │   ├── scheduler/                     Placeholder — job scheduler (future)
-│   │   ├── telemetry/                     Placeholder — observability (future)
-│   │   └── workers/                       Placeholder — background workers (future)
+│   │   └── notifications/                 NotificationService — simulated Teams + Email delivery
 │   │
 │   └── tests/
-│       ├── conftest.py                    Test fixtures, in-memory SQLite setup, get_db override
-│       ├── unit/test_incident_service.py  9 unit tests (service layer with mocks)
-│       └── api/test_incidents_api.py      14 API integration tests (full HTTP via SQLite)
+│       ├── conftest.py                    Test fixtures, in-memory SQLite, get_db override
+│       ├── unit/                          280+ unit + property-based tests
+│       └── api/                           API integration tests
 │
-├── alembic/
-│   └── versions/
-│       ├── 78b5282e58c6_create_incidents_table.py
-│       ├── 15fef2bf1df7_create_shift_roster_table.py
-│       ├── 9092bd4e4a4f_normalized_shift_roster_schema.py
-│       ├── e67628208ea8_add_assignment_rr_state_and_history.py
-│       ├── 2dab1e1fa831_fix_enum_values_lowercase.py
-│       └── 76deb7e985b5_shift_roster_string_columns.py
+├── docs/
+│   ├── implementation.md                  This file
+│   └── event_driven_orchestration.md      Full orchestration flow documentation
 │
-├── scripts/
-│   └── check_roster_data.py               Debug: shows DB groups, shift_roster count, today's roster
-│
-├── docs/implementation.md                 This file
-├── alembic.ini
+├── alembic/versions/                      DB migration scripts
 ├── pyproject.toml
 ├── pytest.ini
-├── .env / .env.example
-└── README.md
+└── .env
 ```
 
 ---
@@ -233,8 +157,7 @@ Setup, config, logging, CORS, exception handling, API versioning, health endpoin
 
 # Phase 2 — Incident Module ✅
 
-## Database
-Table: `incidents`
+## Database: `incidents` table
 
 | Field | Type | Notes |
 |---|---|---|
@@ -248,38 +171,38 @@ Table: `incidents`
 | assignment_group | String | target team |
 | assigned_to | String | assigned engineer name |
 | caller | String | reporter |
-| work_notes | Text | internal notes |
 | created_at / updated_at | DateTime | auto |
+
+## Database: `incident_work_notes` table
+
+Structured, queryable work note history. Replaces the flat `work_notes` text field.
+
+| Field | Notes |
+|---|---|
+| id | UUID primary key |
+| incident_id | FK → incidents |
+| message | The note body |
+| source_type | USER / ENGINEER / TRIAGE_AGENT / ACKNOWLEDGEMENT_AGENT / PENDING_AGENT / SYSTEM |
+| source_name | Human-readable name |
+| action_type | INCIDENT_CREATE / ASSIGN_ENGINEER / STATE_CHANGE / SEND_ACKNOWLEDGEMENT / SEND_REMINDER / etc. |
+| created_at | Timestamp |
 
 ## REST Endpoints
 
 | Method | URL | Description |
 |---|---|---|
-| POST | /v1/incidents | Create + auto-triggers triage in background |
+| POST | /v1/incidents | Create — event bus triggers Triage automatically |
 | GET | /v1/incidents | List with pagination + filters |
 | GET | /v1/incidents/search | Keyword search |
 | GET | /v1/incidents/{id} | Get by UUID or INC number |
 | PUT | /v1/incidents/{id} | Update |
 | DELETE | /v1/incidents/{id} | Delete |
 
-## Auto-Triage on Create
-When a new incident is created via `POST /v1/incidents`, FastAPI's `BackgroundTasks` automatically triggers `TriageService.run_triage()` asynchronously. The API returns 201 immediately; triage runs in background and updates the incident.
-
 ---
 
 # Phase 3 — Shift Roster Module ✅
 
-## Source Data (Excel format)
-```
-Sheet: Roster
-Columns: Assignment Group | Assigned To | Email | Shift | YYYY-MM-DD to YYYY-MM-DD | Level | 1 | 2 | ... | 31
-Values:  Shift1 | Shift2 | Shift3 | WO | PL | CH | RH
-```
-
-## Shift Code Reference (constant — no DB table)
-```python
-from app.modules.shift_roster.enums import SHIFT_DEFINITIONS, WORKING_SHIFTS, NON_WORKING_CODES
-```
+## Shift Codes
 
 | Code | Label | Timing | Working |
 |---|---|---|---|
@@ -291,223 +214,167 @@ from app.modules.shift_roster.enums import SHIFT_DEFINITIONS, WORKING_SHIFTS, NO
 | CH | Company Holiday | — | ❌ |
 | RH | Restricted Holiday | — | ❌ |
 
-## Shift Time Checker (`shift_time_checker.py`)
-Checks if a shift is **currently active** based on real-world clock:
-```python
-is_shift_active_now("Shift2")  # True if current IST time is 10:00-19:30
-get_shift_status_summary()     # returns all shifts with active status
-```
-
-## Database (4 tables, all String columns — no PostgreSQL enum types)
-
-| Table | Purpose |
-|---|---|
-| shift_roster_uploads | One row per uploaded file — filename, date range, counts, status |
-| engineers | Master engineer records, deduplicated by email, upserted on upload |
-| shift_roster | One row per engineer per day — normalized from Day1..Day31 |
-| shift_roster_history | Audit trail for any post-upload manual changes |
-
 ## REST Endpoints
 
 | Method | URL | Description |
 |---|---|---|
 | POST | /v1/shift-roster/upload | Upload .xlsx or .csv |
 | GET | /v1/shift-roster/uploads | Upload history |
-| GET | /v1/shift-roster/available | Engineers on a date (primary Triage query) |
-| GET | /v1/shift-roster/search | Search with optional date + shift filter |
-| PUT | /v1/shift-roster/roster/{id} | Update single daily entry + log history |
-| GET | /v1/shift-roster/engineer/{email} | Engineer details |
-| PUT | /v1/shift-roster/engineer/{email} | Update engineer |
-| DELETE | /v1/shift-roster/engineer/{email} | Mark inactive |
-| GET | /v1/shift-roster/engineer/{email}/roster | Roster for date range |
-| GET | /v1/shift-roster/engineer/{email}/history | Change audit trail |
+| GET | /v1/shift-roster/available | Engineers available on a date |
+| GET | /v1/shift-roster/search | Search with filters |
+| PUT | /v1/shift-roster/roster/{id} | Update daily entry |
+| GET/PUT/DELETE | /v1/shift-roster/engineer/{email} | Engineer CRUD |
 
 ---
 
-# Phase 5 — AI Context Builder & Four AI Agents ✅
+# Phase 4 — Event-Driven Orchestration ✅
 
-## Complete Multi-Agent Orchestration Flow
+Agents are coordinated by an **in-process async event bus**. No direct agent-to-agent calls.
+
+## How It Works
 
 ```
-1. POST /v1/incidents (new incident created)
-         │
-         ▼ [BackgroundTask auto-triggers]
-       TRIAGE AGENT
-         │
-         ├─ Resolves assignment group via LLM
-         ├─ Builds AIContext
-         ├─ Confirms availability
-         ├─ Selects engineer via round-robin
-         └─ Updates incident → ASSIGNED
-
-         ▼ [auto_acknowledge=True by default]
-   ACKNOWLEDGEMENT AGENT
-         │
-         ├─ Classifies incident intent (service request, access request, etc.)
-         ├─ Selects email template based on classification
-         ├─ Renders customized email response
-         ├─ Sends email to caller
-         ├─ Updates state → ON_HOLD or IN_PROGRESS
-         └─ Triggers PENDING AGENT if ON_HOLD
-
-         ▼ [if state=ON_HOLD]
-       PENDING AGENT (scheduler-based)
-         │
-         ├─ Creates pending cycle (max 3 reminders)
-         ├─ Schedules first reminder in background
-         ├─ Scheduler fires reminders at configured intervals (20s dev, 3600s prod)
-         ├─ Renders context-aware reminder emails
-         ├─ Sends reminders to caller
-         └─ Returns incident to ON_HOLD after each reminder
-
-         ▼ [if user responds with work note]
-     RESOLUTION AGENT
-         │
-         ├─ Triggered by USER work note + ON_HOLD → ACTIVE state change
-         ├─ Analyzes user response intent via LLM
-         ├─ Validates provenance (ACK/Pending workflow)
-         ├─ Sends Teams notification to assigned engineer
-         ├─ If resolution-positive: sends email to assignment group
-         ├─ If eligible: auto-resolves incident
-         └─ Cancels pending cycle once user has responded
+Service Layer → publishes Event → EventBus → dispatches to Handler → runs Agent
 ```
 
-## Agent Architectures
+## Event Subscriptions
 
-### 1. Triage Agent
-**Purpose:** Auto-assign incidents to the correct engineer
-**Location:** `modules/agents/triage/`
+| Event | Handler | Condition |
+|-------|---------|-----------|
+| `IncidentCreatedEvent` | `TriageHandler` | `state == "new"` |
+| `IncidentStateChangedEvent` | `AcknowledgementHandler` | `current == "in_progress"` AND `changed_by == "TriageAgent"` |
+| `IncidentStateChangedEvent` | `PendingHandler` | `current == "on_hold"` AND `changed_by != "PendingAgent"` |
+| `IncidentStateChangedEvent` | `ResolutionHandler` | `previous == "on_hold"` AND `current == "in_progress"` AND `source == USER` |
 
-**Flow:**
-1. Resolve assignment group (LLM analyzes description for common queue incidents)
-2. Build AIContext (incident + available engineers for that group on that date)
-3. Validate availability (at least one engineer must be available)
-4. Select engineer via persistent round-robin (DB-backed, concurrency safe)
-5. Update incident with assigned engineer + set state=in_progress
-6. Record work notes with assignment rationale
+See `docs/event_driven_orchestration.md` for the complete lifecycle flow.
 
-**Key Services:**
-- `LLMService.complete()` — Anthropic Claude for group resolution
-- `ContextService.build_for_incident()` — fetches engineers, builds context
-- `AssignmentService.assign_engineer()` — round-robin selection
-- `IncidentService.update_incident_internal()` — persists assignment
+## Loop Prevention
 
-**Database Tables:**
-- `assignment_group_rr_state` — persists round-robin index per group
-- `assignment_history` — audit trail of assignments
-
-### 2. Acknowledgement Agent
-**Purpose:** Send customized acknowledgement email based on incident type
-**Location:** `modules/agents/acknowledgement/`
-
-**Flow:**
-1. Classify incident intent (STANDARD_INCIDENT, ACCESS_REQUEST, SERVICE_REQUEST, WRONG_REQUEST, SALESFORCE_INCORRECT_REQUEST)
-2. Select template based on classification
-3. Render email with incident context (ticket #, caller, assignment group, engineer)
-4. Send email to caller (simulated in current version)
-5. Update state to ON_HOLD (for special requests) or remain IN_PROGRESS (standard)
-6. Auto-trigger Pending Agent if state changed to ON_HOLD
-
-**Key Components:**
-- `TemplateRenderer` — renders HTML/plain-text emails
-- `AcknowledgementAgent` — LLM-powered intent classification
-- `LLMService.complete()` — Anthropic Claude for classification
-
-**Scenarios:**
-- ACCESS_REQUEST → state=ON_HOLD → triggers PENDING AGENT
-- SERVICE_REQUEST → state=ON_HOLD → triggers PENDING AGENT
-- STANDARD_INCIDENT → state=IN_PROGRESS → no pending cycle
-- WRONG_REQUEST → state=ON_HOLD → pending reminders for caller clarification
-
-### 3. Pending Agent
-**Purpose:** Send scheduled reminders for on-hold incidents waiting for caller action
-**Location:** `modules/agents/pending/`
-
-**Flow:**
-1. **On Acknowledgement → ON_HOLD transition:**
-   - Create PendingCycle (max 3 reminders, 20s apart in dev)
-   - Schedule Reminder 1 in background (no email sent yet)
-
-2. **Background Scheduler (`scheduler.py`) fires due reminders:**
-   - Every 10 seconds, poll for due reminders
-   - When a reminder is due: execute it
-
-3. **On Reminder Execution:**
-   - Render reminder email with escalation context
-   - Increment reminder count
-   - Schedule next reminder (or complete cycle on final reminder)
-   - Return incident to ON_HOLD (even if WorkNoteService auto-activated it)
-
-**Key Components:**
-- `PendingCycleService` — manages pending cycle lifecycle
-- `PendingReminderRenderer` — renders context-aware reminder emails
-- `PendingWorkNoteAnalyzer` — analyzes work notes for LLM context
-
-**Database Tables:**
-- `pending_cycles` — tracks reminder cycles per incident (max 3 reminders)
-
-**Configuration:**
-- `REMINDER_INTERVAL_SECONDS = 20` (dev); change to 3600 in production
-
-### 4. Resolution Agent
-**Purpose:** Auto-resolve incidents when user responds positively in the ON_HOLD state
-**Location:** `modules/agents/resolution/`
-
-**Flow (triggered by USER work note + ON_HOLD → ACTIVE state change):**
-1. **Validate eligibility:**
-   - Trigger must be ON_HOLD → ACTIVE transition
-   - Work note source must be USER (not PENDING_AGENT, ACKNOWLEDGEMENT_AGENT, ENGINEER, SYSTEM)
-
-2. **Provenance check:**
-   - Must have a qualifying ACKNOWLEDGEMENT_AGENT note (non-standard template)
-   - No ENGINEER work note can exist AFTER the ACK note (human intervention blocks auto-resolve)
-   - PENDING_AGENT notes are optional (ACK-only or ACK+reminders both qualify)
-
-3. **LLM Analysis:**
-   - Run ResolutionAgent to classify user response intent:
-     - ISSUE_RESOLVED, REQUEST_COMPLETED, REQUIRED_ACTION_COMPLETED (positive)
-     - ESCALATION_REQUIRED, CLARIFICATION_NEEDED, REJECTED (non-positive)
-   - Extract summary, confidence, next best action
-
-4. **Send Notifications:**
-   - Teams → assigned engineer (always)
-   - Email → assignment group (only if resolution-positive)
-
-5. **Auto-resolve (if eligible):**
-   - If intent is resolution-positive AND provenance confirmed:
-     - Update state → RESOLVED
-     - Cancel active PendingCycle
-     - Write audit note
-
-6. **Cancel PendingCycle:**
-   - Always cancel once USER responds (regardless of resolution outcome)
-   - Prevents stale reminders from firing
-
-**Key Components:**
-- `ResolutionAgent` — LLM-powered response intent analysis
-- `NotificationService` — sends Teams + Email
-- `PendingCycleService.cancel_active_cycle()` — clears pending reminders
-- `LLMService.complete()` — Anthropic Claude for intent classification
-
-**Provenance Rules:**
-- Requires non-standard ACK template (not standard_ack.html)
-- No engineer work notes after ACK note
-- PENDING_AGENT reminders are optional
+| Scenario | Mechanism |
+|----------|-----------|
+| Pending reminder → no new cycle | `changed_by="PendingAgent"` → PendingHandler skips |
+| ACK agent sets ON_HOLD → no Resolution | `triggering_work_note_source != USER` → ResolutionHandler skips |
+| Pending Agent SEND_REMINDER → no Resolution | `source=PENDING_AGENT` in `_NON_USER_SOURCES` |
+| Duplicate PendingHandler calls | Idempotency gate: preserve existing active cycle |
 
 ---
 
-## AI Platform (Shared LLM Layer)
+# Phase 5 — Four AI Agents ✅
+
+## Agent 1: Triage Agent
+
+**Trigger:** `IncidentCreatedEvent(state="new")`
+
+**Flow:**
+1. LLM resolves assignment group → `GROUP_RESOLVED` work note
+2. Build AIContext (incident + engineers for that group on today's date)
+3. Round-robin select engineer → `update_incident_internal(assigned_to=eng.name)` ← no event
+4. Write `ASSIGN_ENGINEER` work note ← committed BEFORE state change
+5. `update_incident_internal(state="in_progress", changed_by="TriageAgent")` → fires ACK
+
+**Work notes
+ produced:**
+```
+INCIDENT_CREATE   (System)
+GROUP_RESOLVED    (TriageAgent)
+ASSIGN_ENGINEER   (TriageAgent)
+```
+
+---
+
+## Agent 2: Acknowledgement Agent
+
+**Trigger:** `IncidentStateChangedEvent(→in_progress, changed_by="TriageAgent")`
+
+**Intent classification:**
+- `STANDARD_INCIDENT` → state stays `in_progress`, no pending cycle
+- `ACCESS_REQUEST` / `SERVICE_REQUEST` / `WRONG_REQUEST` / `SALESFORCE_INCORRECT_REQUEST` → state → `on_hold` → triggers Pending Agent
+
+**Work notes produced:**
+```
+SEND_ACKNOWLEDGEMENT  (AcknowledgementAgent) — email content + intent info
+```
+
+---
+
+## Agent 3: Pending Agent (Reminder Cycle)
+
+**Trigger:** `IncidentStateChangedEvent(→on_hold, changed_by != "PendingAgent")`
+
+**Initial call (force_reminder=False):**
+- If active cycle exists → preserve (idempotency)
+- Otherwise → create `PendingCycle(max_reminders=3)`, schedule Reminder 1
+
+**Scheduler fires each due reminder (force_reminder=True):**
 
 ```
-ai_platform/llm/anthropic_client.py    Singleton AsyncAnthropic client (replaced Groq)
+For each reminder (1/3, 2/3, 3/3):
+  1. Render reminder email
+  2. SEND_REMINDER work note (auto_activate=True)
+       └── State: on_hold → in_progress (auto-activation, shows activity)
+  3. update_incident_internal(state="on_hold", changed_by="PendingAgent")
+       └── State restored: in_progress → on_hold
+  4. STATE_CHANGE work note: "State restored to On Hold after reminder N sent"
+  5. If NOT final: schedule next reminder
+     If FINAL: complete_cycle() — no more reminders, incident stays on_hold
+```
+
+**Work notes produced per reminder:**
+```
+SEND_REMINDER   (PENDING AGENT)  — reminder email content
+STATE_CHANGE    (System)         — "Incident automatically moved to In Progress"
+STATE_CHANGE    (PENDING AGENT)  — "State restored to On Hold after reminder N sent"
+```
+
+**Configuration:** `REMINDER_INTERVAL_SECONDS = 20` (dev) / `3600` (prod)
+
+**After all reminders exhausted:** Cycle COMPLETED. Incident stays `on_hold`. Manual engineer action required.
+
+---
+
+## Agent 4: Resolution Alert Agent
+
+**Trigger:** `IncidentStateChangedEvent(previous=on_hold, current=in_progress, triggering_work_note_source=USER)`
+
+This fires AFTER the state is already `in_progress` (correct audit order):
+```
+User adds work note → auto-activation: on_hold → in_progress → Resolution Agent triggers
+```
+
+**Flow:**
+1. Validate: `previous=on_hold`, `current=active`, `source=USER`
+2. Load triggering work note by ID (the user's note, not the SYSTEM audit note)
+3. Cancel active `PendingCycle` (user responded — no more reminders needed)
+4. LLM classifies user intent:
+   - **Positive:** `ISSUE_RESOLVED` / `REQUEST_COMPLETED` / `REQUIRED_ACTION_COMPLETED`
+   - **Non-positive:** `ESCALATION_REQUIRED` / `CLARIFICATION_NEEDED` / `REJECTED`
+5. Check provenance:
+   - Requires non-standard ACK template note
+   - Blocks if ENGINEER note exists after ACK note
+6. Send Teams → assigned engineer (always)
+7. Send Email → assignment group (positive intent only)
+8. If positive + provenance confirmed → `state = resolved`
+
+**Work notes produced:**
+```
+SEND_ACKNOWLEDGEMENT  (ResolutionAgent)  — [TEAMS] notification
+SEND_ACKNOWLEDGEMENT  (ResolutionAgent)  — [EMAIL] notification (if positive)
+STATE_CHANGE          (ResolutionAgent)  — "Incident auto-resolved" (if positive + provenance)
+SYSTEM_NOTE           (ResolutionAgent)  — reason if no auto-resolve
+```
+
+---
+
+# AI Platform (Shared LLM Layer)
+
+```
+ai_platform/llm/anthropic_client.py    Singleton AsyncAnthropic client
 ai_platform/services/llm_service.py    LLMService.complete(messages) → string
-                                        Extracts system parameter (Anthropic API requirement)
-                                        Used by all four agents for LLM calls
 ```
 
-**LLM Provider:** Anthropic Claude 3.5 Sonnet
-**API Format:** System message passed separately (not in messages array)
-**Max Tokens:** 1024 (configurable)
+**LLM Provider:** Anthropic Claude 3.5 Sonnet  
+**Max Tokens:** 1024 (configurable)  
+Used by: TriageService, AcknowledgementAgent, PendingWorkNoteAnalyzer, ResolutionAgent
 
 ---
 
@@ -525,6 +392,7 @@ GET    /v1/incidents/search
 GET    /v1/incidents/{id}
 PUT    /v1/incidents/{id}
 DELETE /v1/incidents/{id}
+POST   /v1/incidents/bulk-import
 
 POST   /v1/shift-roster/upload
 GET    /v1/shift-roster/uploads
@@ -556,18 +424,17 @@ uvicorn app.main:app --reload
 |---|---|
 | http://localhost:8000/docs | Swagger UI |
 | http://localhost:8000/v1/health | App health |
-| http://localhost:8000/v1/ai-health | Groq LLM test |
+| http://localhost:8000/v1/ai-health | Anthropic LLM test |
 | http://localhost:8000/v1/shift-status | Active shifts now |
-| http://localhost:8000/v1/triage/{id}/context | Preview AIContext |
 
 ---
 
 # Tests
 
 ```bash
-pytest app/tests/unit/    # 9 unit tests
-pytest app/tests/api/     # 14 API integration tests
-pytest                    # all 23
+pytest app/tests/unit/    # 250+ unit + property-based tests
+pytest app/tests/api/     # API integration tests
+pytest                    # all 280+
 ```
 
 ---
@@ -578,11 +445,8 @@ pytest                    # all 23
 |---|---|---|
 | Users / Auth | modules/users/ | JWT authentication |
 | Knowledge Base | modules/knowledge/ | Historical resolution data, FAQs |
-| Analytics | modules/analytics/ | Dashboards, MTTR metrics, escalation trends |
-| Audit | modules/audit/ | System-wide audit log (beyond work notes) |
-| ServiceNow Integration | integrations/servicenow/ | Replace repository layer with ServiceNow API |
-| MS Teams/Email Integration | integrations/notifications/ | Real notification delivery (not simulated) |
-| LLM Tools | ai_platform/tools/ | Agent-to-service tool layer for extended reasoning |
-| Platform Services | platform/ | Events, caching, messaging, scheduler persistence |
-| Multi-language Support | — | Localization for email templates, UI |
-| Rate Limiting / Quotas | — | API request throttling, usage tracking |
+| Analytics | modules/analytics/ | Dashboards, MTTR metrics |
+| ServiceNow Integration | integrations/servicenow/ | Replace repository with ServiceNow API |
+| Real Email/Teams | integrations/notifications/ | Live delivery (currently simulated) |
+| Redis Event Bus | platform/events/ | Replace in-process bus for multi-instance deployments |
+| Rate Limiting | — | API request throttling |

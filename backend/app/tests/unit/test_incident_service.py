@@ -1,6 +1,6 @@
 """Unit tests for IncidentService using mocked repository."""
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from app.modules.incidents.service import IncidentService
 from app.modules.incidents.schemas import IncidentCreate, IncidentUpdate
 from app.modules.incidents.enums import IncidentPriority, IncidentState, IncidentCategory
@@ -49,7 +49,18 @@ async def test_create_incident(service_with_mock):
     svc.repo.create.return_value = mock_incident
 
     payload = IncidentCreate(short_description="Test incident")
-    result = await svc.create_incident(payload)
+    # Patch event-related methods — this is a unit test for IncidentService, not events
+    with patch(
+        "app.modules.work_notes.service.WorkNoteService._get_incident_state_and_number",
+        return_value=("new", "INC0000001"),
+    ), patch(
+        "app.modules.work_notes.service.WorkNoteService._publish_work_note_event",
+        new_callable=AsyncMock,
+    ), patch(
+        "app.orchestrator.bus.EventBus.publish",
+        new_callable=AsyncMock,
+    ):
+        result = await svc.create_incident(payload)
 
     assert result.incident_number == "INC0000001"
     svc.repo.create.assert_called_once()
@@ -92,7 +103,18 @@ async def test_update_incident_success(service_with_mock):
     svc.repo.get_by_id.return_value = mock_incident
     svc.repo.update.return_value = updated
 
-    result = await svc.update_incident("test-id", IncidentUpdate(state=IncidentState.RESOLVED))
+    with patch(
+        "app.modules.work_notes.service.WorkNoteService._get_incident_state_and_number",
+        return_value=("new", "INC0000001"),
+    ), patch(
+        "app.modules.work_notes.service.WorkNoteService._publish_work_note_event",
+        new_callable=AsyncMock,
+    ), patch(
+        "app.orchestrator.bus.EventBus.publish",
+        new_callable=AsyncMock,
+    ):
+        result = await svc.update_incident("test-id", IncidentUpdate(state=IncidentState.RESOLVED))
+
     assert result.state == IncidentState.RESOLVED.value
 
 

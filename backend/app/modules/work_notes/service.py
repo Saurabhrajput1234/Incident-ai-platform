@@ -17,6 +17,15 @@ work note (e.g. agents that set ON_HOLD then record an acknowledgement note)
 MUST pass auto_activate=False to prevent the note from undoing the
 intentional state change.
 
+Event Publishing
+----------------
+After persisting every work note, WorkNoteService publishes a WorkNoteAddedEvent
+to the event bus.  This decouples downstream handlers (e.g. ResolutionHandler)
+from the work note creation path.
+
+The event is published BEFORE auto-activation so that handlers receive the
+incident state at the time the note was written, not the post-activation state.
+
 State Change and Resolution Alert Trigger
 ------------------------------------------
 The actual state transition is performed by
@@ -38,7 +47,6 @@ To keep the audit trail clear, IncidentService.activate_incident_from_work_note(
 writes a STATE_CHANGE work note when a transition occurs.
 """
 import logging
-import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,7 +59,6 @@ from app.modules.work_notes.model import IncidentWorkNote
 logger = logging.getLogger(__name__)
 
 # The target state written during auto-activation.
-# Matches IncidentState.IN_PROGRESS = "in_progress".
 _AUTO_ACTIVATE_STATE = "in_progress"
 
 # States that already represent "active/resumed" — no auto-activation needed.
@@ -93,8 +100,7 @@ class WorkNoteService:
                         undo the intended state.
         """
         # --- Step 1: Persist the work note FIRST ---
-        # The note must exist in the DB before activation fires the Resolution
-        # Agent, so that ResolutionService can fetch it by ID.
+        # The note must exist in the DB before anything else reads it by ID.
         payload = WorkNoteCreate(
             incident_id=incident_id,
             message=message,
@@ -109,22 +115,84 @@ class WorkNoteService:
             note.id, incident_id, source_type, source_name, action_type,
         )
 
-        # --- Step 2: Optional auto-activate via IncidentService ---
-        # Passes the triggering note ID and source so ResolutionService can:
-        #   (a) load the exact note by ID (not the SYSTEM audit note that follows)
-        #   (b) gate eligibility on source type BEFORE running the LLM
-        # WorkNoteService itself has NO resolution trigger logic.
+        # --- Step 2: Fetch current incident state for the event payload ---
+        # We snapshot state NOW (before any auto-activation) so the event
+        # reflects what state the incident was in when the note was written.
+        incident_state, incident_number = await self._get_incident_state_and_number(incident_id)
+
+        # --- Step 3: Publish WorkNoteAddedEvent ---
+        # Handlers (e.g. ResolutionHandler) subscribe to this and filter on
+        # source_type + incident_state.  Publishing happens before auto-activate
+        # so the ResolutionHandler sees the pre-activation on_hold state.
+        source_type_val = source_type.value if hasattr(source_type, "value") else str(source_type)
+        action_type_val = action_type.value if action_type and hasattr(action_type, "value") else (str(action_type) if action_type else "")
+        await self._publish_work_note_event(
+            incident_id=incident_id,
+            incident_number=incident_number,
+            work_note_id=note.id,
+            source_type=source_type_val,
+            source_name=source_name,
+            action_type=action_type_val,
+            incident_state=incident_state,
+        )
+
+        # --- Step 4: Optional auto-activate via IncidentService ---
+        # Passes the triggering note ID and source so that downstream handlers
+        # (triggered via IncidentStateChangedEvent) can identify the original note.
         if auto_activate:
             await self._maybe_activate_incident(
                 incident_id=incident_id,
                 triggered_by=source_name,
                 triggering_work_note_id=note.id,
-                triggering_work_note_source=(
-                    source_type.value if hasattr(source_type, "value") else str(source_type)
-                ),
+                triggering_work_note_source=source_type_val,
             )
 
         return WorkNoteResponse.model_validate(note)
+
+    # ------------------------------------------------------------------
+    # Private: event publishing helpers
+    # ------------------------------------------------------------------
+
+    async def _get_incident_state_and_number(self, incident_id: str) -> tuple[str, str]:
+        """
+        Fetch incident state and number in a single DB call for the event payload.
+        Returns (state_str, incident_number).
+        """
+        from app.modules.incidents.repository import IncidentRepository
+        repo = IncidentRepository(self.db)
+        incident = await repo.get_by_id(incident_id)
+        if incident is None:
+            return "unknown", incident_id
+        state = incident.state
+        state_str = state.value if hasattr(state, "value") else str(state)
+        return state_str, incident.incident_number
+
+    async def _publish_work_note_event(
+        self,
+        incident_id: str,
+        incident_number: str,
+        work_note_id: str,
+        source_type: str,
+        source_name: str,
+        action_type: str,
+        incident_state: str,
+    ) -> None:
+        """Publish WorkNoteAddedEvent to the event bus (fire-and-forget safe)."""
+        try:
+            from app.orchestrator.bus import event_bus
+            from app.orchestrator.events import WorkNoteAddedEvent
+            await event_bus.publish(WorkNoteAddedEvent(
+                incident_id=incident_id,
+                incident_number=incident_number,
+                work_note_id=work_note_id,
+                source_type=source_type,
+                source_name=source_name,
+                action_type=action_type,
+                incident_state=incident_state,
+            ))
+        except Exception as exc:
+            # Never let event publishing break work note creation
+            logger.error("[WorkNoteService] Failed to publish WorkNoteAddedEvent: %s", exc)
 
     # ------------------------------------------------------------------
     # Private: auto-activate helper
