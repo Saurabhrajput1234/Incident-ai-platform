@@ -58,7 +58,8 @@ export const rosterApi = {
 
 // ── Dashboard ──────────────────────────────────────────
 export const dashboardApi = {
-  stats: () => api.get('/dashboard/stats').then(r => r.data),
+  stats: (params) => api.get('/dashboard/allstats', { params }).then(r => r.data),
+  allstats: (params) => api.get('/dashboard/allstats', { params }).then(r => r.data),
   trends: () => api.get('/dashboard/trends').then(r => r.data),
   byGroup: () => api.get('/dashboard/by-group').then(r => r.data),
   byPriority: () => api.get('/dashboard/by-priority').then(r => r.data),
