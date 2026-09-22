@@ -36,10 +36,6 @@ async def run_triage(
         default=True,
         description="If True, updates the incident with the recommended engineer."
     ),
-    auto_acknowledge: bool = Query(
-        default=True,
-        description="If True, automatically triggers Acknowledgement Agent after triage assignment."
-    ),
     service: TriageService = Depends(get_triage_service),
 ):
     """
@@ -50,14 +46,13 @@ async def run_triage(
     2. Build AIContext (incident + available engineers)
     3. Triage Agent scores engineers and picks the best one
     4. Update incident with recommended engineer and state=in_progress
-    5. Optionally auto-triggers Acknowledgement Agent
+    5. Acknowledgement Agent triggered automatically via the event bus
     """
     return await service.run_triage(
         incident_id=incident_id,
         context_date=context_date,
         apply_recommendation=apply_recommendation,
         force=True,
-        auto_acknowledge=auto_acknowledge,
     )
 
 

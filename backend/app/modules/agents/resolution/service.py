@@ -77,7 +77,7 @@ from app.modules.work_notes.service import WorkNoteService
 logger = logging.getLogger(__name__)
 
 _AGENT_NAME = "ResolutionAgent"
-_AGENT_SOURCE_TYPE = WorkNoteSourceType.SYSTEM.value   # generic source for audit notes
+_AGENT_SOURCE_TYPE = WorkNoteSourceType.RESOLUTION_AGENT.value
 _ON_HOLD_STATE = "on_hold"   # the eligible previous state for this agent
 _ACTIVE_STATE = "active"     # trigger contract string (not an IncidentState enum value)
 _RESOLVED_STATE = "resolved"
@@ -774,7 +774,7 @@ class ResolutionService:
             recipients=[recipient],
             message=message,
             source_name=_AGENT_NAME,
-            source_type=WorkNoteSourceType.SYSTEM.value,
+            source_type=WorkNoteSourceType.RESOLUTION_AGENT.value,
             action_type=WorkNoteActionType.SEND_ACKNOWLEDGEMENT.value,
         )
         result: NotificationResult = await self.notification_svc.send(req)
@@ -817,7 +817,7 @@ class ResolutionService:
             subject=subject,
             message=message,
             source_name=_AGENT_NAME,
-            source_type=WorkNoteSourceType.SYSTEM.value,
+            source_type=WorkNoteSourceType.RESOLUTION_AGENT.value,
             action_type=WorkNoteActionType.SEND_ACKNOWLEDGEMENT.value,
         )
         result: NotificationResult = await self.notification_svc.send(req)
@@ -841,7 +841,7 @@ class ResolutionService:
             await self.work_note_svc.add_note(
                 incident_id=incident_id,
                 message=message,
-                source_type=WorkNoteSourceType.SYSTEM,
+                source_type=WorkNoteSourceType.RESOLUTION_AGENT,
                 source_name=_AGENT_NAME,
                 action_type=action_type,
                 auto_activate=False,  # audit notes must not trigger state change

@@ -51,6 +51,16 @@ export default function IncidentDetail() {
   })
   const activeCycle = cycleData?.cycle?.status === 'ACTIVE' ? cycleData.cycle : null
 
+  // Auto-fill source name when source type changes
+  useEffect(() => {
+    if (!incident) return
+    if (noteSourceType === 'USER') {
+      setNoteSourceName(incident.caller || '')
+    } else if (noteSourceType === 'ENGINEER') {
+      setNoteSourceName(incident.assigned_to || '')
+    }
+  }, [noteSourceType, incident])
+
   // Only show popup when assigned_to transitions null → value AFTER initial load
   useEffect(() => {
     if (!incident) return
@@ -282,7 +292,9 @@ export default function IncidentDetail() {
             ) : (
               <div className="space-y-3">
                 {workNotes.map((note) => (
-                  <WorkNoteEntry key={note.id} note={note} />
+                  <div key={note.id} className="border border-gray-200 rounded-lg p-4 bg-white hover:shadow-md transition-shadow">
+                    <WorkNoteEntry note={note} />
+                  </div>
                 ))}
               </div>
             )}
@@ -394,6 +406,7 @@ const SOURCE_STYLES = {
   TRIAGE_AGENT:          { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Triage Agent' },
   ACKNOWLEDGEMENT_AGENT: { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'Ack Agent' },
   PENDING_AGENT:         { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Pending Agent' },
+  RESOLUTION_AGENT:      { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Resolution Agent' },
   ENGINEER:              { bg: 'bg-green-100',  text: 'text-green-700',  label: 'Engineer' },
   USER:                  { bg: 'bg-gray-100',   text: 'text-gray-600',   label: 'User' },
   SYSTEM:                { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'System' },
@@ -404,27 +417,26 @@ function WorkNoteEntry({ note }) {
   const time = new Date(note.created_at).toLocaleString()
 
   return (
-    <div className="flex gap-3 text-sm">
-      <div className="flex-shrink-0 mt-0.5">
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center ${style.bg}`}>
-          <MessageSquare size={13} className={style.text} />
-        </div>
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap mb-0.5">
-          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${style.bg} ${style.text}`}>
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${style.bg} ${style.text}`}>
+            <MessageSquare size={12} />
             {style.label}
           </span>
-          <span className="text-gray-700 font-medium text-xs">{note.source_name}</span>
+          <span className="text-sm font-semibold text-gray-800">{note.source_name}</span>
           {note.action_type && (
-            <span className="text-xs text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded">
+            <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded">
               {note.action_type.replace(/_/g, ' ')}
             </span>
           )}
-          <span className="text-xs text-gray-400 ml-auto">{time}</span>
         </div>
-        <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{note.message}</p>
+        <span className="text-xs text-gray-400 font-medium">{time}</span>
       </div>
+      
+      {/* Message */}
+      <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{note.message}</div>
     </div>
   )
 }

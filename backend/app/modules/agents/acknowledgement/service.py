@@ -7,6 +7,9 @@ Flow:
   3. Update incident state if needed
   4. Write structured work note via WorkNoteService
   5. Return result
+
+State changes are published to the event bus.
+PendingHandler listens for on_hold state transitions.
 """
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +24,6 @@ from app.modules.incidents.service import IncidentService
 from app.modules.incidents.schemas import IncidentUpdate
 from app.modules.work_notes.service import WorkNoteService
 from app.modules.work_notes.enums import WorkNoteSourceType, WorkNoteActionType
-
 from app.modules.agents.acknowledgement.template_renderer import TemplateRenderer
 
 logger = logging.getLogger(__name__)
@@ -50,7 +52,6 @@ class AcknowledgementService:
         intent_info = IntentResult(**res_data["intent_info"])
         template_used = res_data.get("template_used", "standard_ack.html")
 
-        # Build template rendering context
         tpl_context = {
             "ticket_number": incident.incident_number,
             "caller_name": incident.caller or "Valued Employee",
@@ -59,10 +60,8 @@ class AcknowledgementService:
             "assigned_engineer_name": incident.assigned_to or "Assigned Engineer",
         }
 
-        # Render complete email body
         email_text = self.renderer.render_plain_text_email(template_used, tpl_context)
 
-        # Determine state change
         if intent_info.intent in (
             IntentType.SALESFORCE_INCORRECT_REQUEST,
             IntentType.WRONG_REQUEST,
@@ -71,11 +70,10 @@ class AcknowledgementService:
         ):
             new_state = "on_hold"
             status_desc = "Incident status updated to Pending / On Hold."
-        else:  # STANDARD_INCIDENT
+        else:
             new_state = incident.state
             status_desc = f"Ticket assigned to {incident.assigned_to or 'Engineer'} ({incident.assignment_group or 'Group'})."
 
-        # Construct work note containing status and the whole rendered email content
         note_msg = (
             f"Acknowledgement Agent executed successfully.\n"
             f"• Classified Intent: {intent_info.intent.value} (Confidence: {intent_info.confidence:.2f})\n"
@@ -86,16 +84,13 @@ class AcknowledgementService:
             f"============================================================"
         )
 
-        # Update incident state (if changed)
         if new_state != incident.state:
             await self.incident_service.update_incident_internal(
                 incident.id,
                 IncidentUpdate(state=new_state),
+                changed_by="ACKNOWLEDGEMENT_AGENT",  # PendingHandler listens for this
             )
 
-        # Write structured work note
-        # auto_activate=False: the state was intentionally set to on_hold above;
-        # this note must not undo that deliberate transition.
         await self.work_note_svc.add_note(
             incident_id=incident.id,
             message=note_msg,
@@ -104,15 +99,6 @@ class AcknowledgementService:
             action_type=WorkNoteActionType.SEND_ACKNOWLEDGEMENT,
             auto_activate=False,
         )
-
-        # Auto-trigger Pending Agent when moved to on_hold/pending
-        if new_state in ("on_hold", "pending"):
-            try:
-                from app.modules.agents.pending.service import PendingService
-                pending_svc = PendingService(self.db)
-                await pending_svc.process_pending_transition(incident_id=incident.id)
-            except Exception as e:
-                logger.error(f"[AcknowledgementService] Auto-trigger for PendingAgent failed: {e}")
 
         ack_result = AcknowledgementResult(
             incident_id=incident.id,
