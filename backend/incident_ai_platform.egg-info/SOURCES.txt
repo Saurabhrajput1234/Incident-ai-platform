@@ -2,6 +2,7 @@ README.md
 pyproject.toml
 app/__init__.py
 app/main.py
+app/ai_platform/llm/anthropic_client.py
 app/ai_platform/llm/groq_client.py
 app/ai_platform/services/llm_service.py
 app/ai_platform/tools/base_tool.py
@@ -117,6 +118,16 @@ app/modules/work_notes/model.py
 app/modules/work_notes/repository.py
 app/modules/work_notes/schemas.py
 app/modules/work_notes/service.py
+app/orchestrator/__init__.py
+app/orchestrator/bus.py
+app/orchestrator/constants.py
+app/orchestrator/events.py
+app/orchestrator/registry.py
+app/orchestrator/handlers/__init__.py
+app/orchestrator/handlers/acknowledgement.py
+app/orchestrator/handlers/pending.py
+app/orchestrator/handlers/resolution.py
+app/orchestrator/handlers/triage.py
 app/tests/conftest.py
 app/tests/api/test_incidents_api.py
 app/tests/api/test_work_notes_api.py
@@ -125,6 +136,7 @@ app/tests/unit/test_auto_resolution_trigger.py
 app/tests/unit/test_incident_service.py
 app/tests/unit/test_notification_integration.py
 app/tests/unit/test_notification_service.py
+app/tests/unit/test_orchestration_properties.py
 app/tests/unit/test_pending_agent.py
 app/tests/unit/test_pending_cycle_integration.py
 app/tests/unit/test_pending_cycle_service.py

@@ -5,6 +5,7 @@ import IncidentCreate from './pages/IncidentCreate'
 import IncidentDetail from './pages/IncidentDetail'
 import ShiftRoster from './pages/ShiftRoster'
 import Dashboard from './pages/Dashboard'
+import Agents from './pages/Agents'
 import BulkImport from './pages/BulkImport'
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
       <Route path="/" element={<Layout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="agents" element={<Agents />} />
         <Route path="incidents" element={<IncidentList />} />
         <Route path="incidents/new" element={<IncidentCreate />} />
         <Route path="incidents/:id" element={<IncidentDetail />} />
