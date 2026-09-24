@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { dashboardApi } from '../api/client'
 import {
@@ -19,7 +19,9 @@ import {
   RotateCcw,
   MessageSquare,
   Activity,
-  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  Target,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -37,9 +39,75 @@ import {
   Cell,
 } from 'recharts'
 
+const formatActivityTime = (isoString, fallbackTime) => {
+  if (!isoString) return fallbackTime || '—'
+  try {
+    const d = new Date(isoString)
+    if (isNaN(d.getTime())) return fallbackTime || '—'
+
+    const now = new Date()
+    const isToday = d.toDateString() === now.toDateString()
+
+    if (isToday) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    } else {
+      return (
+        d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+        ', ' +
+        d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      )
+    }
+  } catch {
+    return fallbackTime || '—'
+  }
+}
+
 export default function Dashboard() {
-  const [timeRange, setTimeRange] = useState('24h')
-  const [group, setGroup] = useState('all')
+  const [searchParams] = useSearchParams()
+
+  const [timeRange, setTimeRange] = useState(() => {
+    const fromUrl = searchParams.get('time_range')
+    if (fromUrl && ['24h', '7d', '30d', 'all'].includes(fromUrl)) return fromUrl
+    try {
+      const saved = localStorage.getItem('dashboard_time_range')
+      if (saved && ['24h', '7d', '30d', 'all'].includes(saved)) return saved
+    } catch {
+      // ignore
+    }
+    return '24h'
+  })
+
+  const [group, setGroup] = useState(() => {
+    const fromUrl = searchParams.get('group')
+    if (fromUrl) return fromUrl
+    try {
+      const saved = localStorage.getItem('dashboard_assignment_group')
+      if (saved) return saved
+    } catch {
+      // ignore
+    }
+    return 'all'
+  })
+
+  const [activityPage, setActivityPage] = useState(1)
+  const ACTIVITY_PAGE_SIZE = 10
+
+  // Persist filter selections to localStorage so navigation across pages retains the user's choices
+  useEffect(() => {
+    try {
+      localStorage.setItem('dashboard_time_range', timeRange)
+    } catch {
+      // ignore
+    }
+  }, [timeRange])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('dashboard_assignment_group', group)
+    } catch {
+      // ignore
+    }
+  }, [group])
 
   const { data: stats, isFetching: statsFetching } = useQuery({
     queryKey: ['dash-stats', timeRange, group],
@@ -189,19 +257,18 @@ export default function Dashboard() {
       { name: 'Auto Resolved', count: '29', percentage: 37, color: 'bg-indigo-600' },
     ]
 
-  // Pending Cycle Status Donut data from real work notes
+  // Pending Cycle Status Donut data from real work notes or demo specs
   const pendingCycleData = stats?.pending_cycle_status?.length
     ? stats.pending_cycle_status
     : [
-      { name: 'Active', value: 48, percentage: '71%', count: '48', color: '#10b981' },
-      { name: 'Completed', value: 18, percentage: '26%', count: '18', color: '#3b82f6' },
-      { name: 'Cancelled', value: 2, percentage: '3%', count: '2', color: '#f97316' },
+      { name: 'Active', value: 143, percentage: '15%', count: '143', color: '#10b981' },
+      { name: 'Completed', value: 721, percentage: '76%', count: '721', color: '#3b82f6' },
+      { name: 'Cancelled', value: 89, percentage: '9%', count: '89', color: '#f43f5e' },
     ]
 
-  const totalPendingCycles = pendingCycleData.reduce(
-    (acc, cur) => acc + (typeof cur.value === 'number' ? cur.value : 0),
-    0
-  )
+  const totalPendingCycles = stats?.pending_cycle_status?.length
+    ? pendingCycleData.reduce((acc, cur) => acc + (typeof cur.value === 'number' ? cur.value : 0), 0)
+    : 953
 
   // Reminder Distribution Bar Graph data from real work notes or demo specs
   const reminderDistributionData = stats?.reminder_distribution?.length
@@ -224,7 +291,20 @@ export default function Dashboard() {
   const userResponseRateR2 = stats?.user_response_rate_r2 || '28%'
   const userResponseRateR3 = stats?.user_response_rate_r3 || '18%'
 
-  // Recent Agent Activity (latest 5 tickets)
+  // Resolution Outcomes Donut data from real work notes
+  const resolutionOutcomesData = stats?.resolution_outcomes?.length
+    ? stats.resolution_outcomes
+    : [
+      { name: 'Auto Resolved', value: 0, percentage: '0%', count: '0', color: '#10b981' },
+      { name: 'Not Resolved', value: 0, percentage: '0%', count: '0', color: '#3b82f6' },
+      { name: 'Blocked (Engineer)', value: 0, percentage: '0%', count: '0', color: '#f97316' },
+    ]
+
+  const totalResolutionRuns = stats?.total_resolution_runs != null
+    ? stats.total_resolution_runs
+    : 0
+
+  // Recent Agent Activity (paginated 10 per page)
   const recentActivity = stats?.recent_agent_activity?.length
     ? stats.recent_agent_activity
     : [
@@ -269,6 +349,11 @@ export default function Dashboard() {
         },
       ]
 
+  const totalActivityPages = Math.max(1, Math.ceil(recentActivity.length / ACTIVITY_PAGE_SIZE))
+  const currentActivityPage = Math.min(Math.max(1, activityPage), totalActivityPages)
+  const activityStartIndex = (currentActivityPage - 1) * ACTIVITY_PAGE_SIZE
+  const paginatedActivity = recentActivity.slice(activityStartIndex, activityStartIndex + ACTIVITY_PAGE_SIZE)
+
   return (
     <div className="space-y-6 pb-10">
       {/* ── Simple Clean Header ───────────────────────────────── */}
@@ -296,7 +381,16 @@ export default function Dashboard() {
             <Calendar size={14} className="text-slate-400 absolute left-3 pointer-events-none" />
             <select
               value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value
+                setTimeRange(val)
+                setActivityPage(1)
+                try {
+                  localStorage.setItem('dashboard_time_range', val)
+                } catch {
+                  // ignore
+                }
+              }}
               className="pl-8 pr-8 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors cursor-pointer appearance-none"
             >
               <option value="24h">Last 24 hours</option>
@@ -311,7 +405,16 @@ export default function Dashboard() {
           <div className="relative inline-flex items-center">
             <select
               value={group}
-              onChange={(e) => setGroup(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value
+                setGroup(val)
+                setActivityPage(1)
+                try {
+                  localStorage.setItem('dashboard_assignment_group', val)
+                } catch {
+                  // ignore
+                }
+              }}
               className="pl-3.5 pr-8 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors cursor-pointer appearance-none max-w-[200px] truncate"
             >
               <option value="all">All Assignment Groups</option>
@@ -601,7 +704,7 @@ export default function Dashboard() {
           </div>
 
           {/* 4-Line Activity Chart */}
-          <div className="h-64 w-full mt-4">
+          <div className="h-44 w-full mt-3">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={agentActivityData}
@@ -701,22 +804,22 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Funnel Progress Bars */}
-          <div className="mt-4 space-y-3.5">
+          {/* Funnel Progress Bars (Clean Compact Layout matching demo) */}
+          <div className="mt-4 space-y-3">
             {funnelStages.map((stage) => (
               <div key={stage.name} className="flex items-center gap-3 text-xs">
                 {/* Stage volume count */}
-                <span className="w-14 font-semibold text-slate-800 shrink-0 text-right">
+                <span className="w-7 font-semibold text-slate-800 shrink-0 text-right">
                   {stage.count}
                 </span>
 
                 {/* Stage title */}
-                <span className="w-36 font-medium text-slate-600 shrink-0 truncate">
+                <span className="w-32 font-medium text-slate-600 shrink-0 truncate">
                   {stage.name}
                 </span>
 
                 {/* Horizontal Funnel Bar */}
-                <div className="flex-1 bg-slate-100 h-5 rounded-md overflow-hidden p-0.5">
+                <div className="flex-1 bg-slate-100/90 h-5 rounded-md overflow-hidden p-0.5">
                   <div
                     className={`${stage.color} h-full rounded transition-all duration-500`}
                     style={{ width: `${stage.percentage}%` }}
@@ -724,7 +827,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Percentage */}
-                <span className="w-10 text-right font-semibold text-slate-500 shrink-0">
+                <span className="w-10 text-right font-medium text-slate-500 shrink-0">
                   {stage.percentage}%
                 </span>
               </div>
@@ -733,25 +836,25 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Row 3: Pending & Reminder Analytics ──────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Pending Cycle Status Donut Card */}
-        <div className="lg:col-span-12 xl:col-span-5 bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
-          {/* Card Header */}
-          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-            <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center">
-              <Clock size={16} />
+      {/* ── Row 3: Pending, Reminder & Resolution Analytics (Balanced Proportions: 29.5% - 41% - 29.5%) ──────────────────── */}
+      <div className="flex flex-col xl:flex-row gap-4 items-stretch">
+        {/* 1. Pending Cycle Status Donut Card */}
+        <div className="w-full xl:w-[29.5%] min-w-0 bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+          {/* Card Header matching demo picture */}
+          <div className="flex items-center gap-3 pb-3.5 border-b border-slate-100/80">
+            <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-500 shrink-0">
+              <Clock size={18} />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-800 tracking-tight">Pending Cycle Status</h3>
+              <h3 className="text-base font-bold text-slate-900 tracking-tight">Pending Cycle Status</h3>
               <p className="text-xs text-slate-400">Current status of pending workflows</p>
             </div>
           </div>
 
-          {/* Donut Chart & Legend */}
-          <div className="flex items-center justify-between gap-4 mt-5">
+          {/* Donut Chart & Legend (Vertically Centered) */}
+          <div className="flex-1 flex items-center justify-between gap-2.5 pt-3">
             {/* Donut with center total */}
-            <div className="relative w-44 h-44 shrink-0 flex items-center justify-center">
+            <div className="relative w-28 h-28 shrink-0 flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -760,40 +863,40 @@ export default function Dashboard() {
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    innerRadius={50}
-                    outerRadius={68}
+                    innerRadius={36}
+                    outerRadius={52}
                     strokeWidth={2}
                     stroke="#ffffff"
                     startAngle={90}
                     endAngle={-270}
                   >
                     {pendingCycleData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                      <Cell key={`pending-cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-xl font-bold text-slate-900 leading-none">
+                <span className="text-lg font-extrabold text-slate-900 leading-none">
                   {totalPendingCycles.toLocaleString()}
                 </span>
-                <span className="text-[11px] font-medium text-slate-400 mt-1">Total Cycles</span>
+                <span className="text-[10px] font-medium text-slate-400 mt-0.5">Total Cycles</span>
               </div>
             </div>
 
             {/* Custom Legend */}
-            <div className="flex-1 space-y-3 pr-2">
+            <div className="flex-1 min-w-0 space-y-2.5 pl-0.5">
               {pendingCycleData.map((item) => (
-                <div key={item.name} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
+                <div key={item.name} className="flex items-center justify-between text-xs gap-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
                     <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      className="w-2.5 h-2.5 rounded-sm shrink-0"
                       style={{ backgroundColor: item.color }}
                     />
-                    <span className="font-medium text-slate-600">{item.name}</span>
+                    <span className="font-medium text-slate-700 truncate">{item.name}</span>
                   </div>
-                  <span className="font-bold text-slate-800">
-                    {item.count} <span className="font-normal text-slate-400">({item.percentage})</span>
+                  <span className="font-bold text-slate-900 shrink-0 whitespace-nowrap">
+                    {item.count} <span className="font-medium text-slate-400">({item.percentage})</span>
                   </span>
                 </div>
               ))}
@@ -801,10 +904,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Reminder Distribution Card (Exact Match to Demo Picture) */}
-        <div className="lg:col-span-12 xl:col-span-7 bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+        {/* 2. Reminder Distribution Card (Generously Sized at 41% width) */}
+        <div className="w-full xl:w-[41%] min-w-0 bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col">
           {/* Card Header matching demo: purple circle with bell */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 pb-3.5 border-b border-slate-100/80">
             <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 shrink-0">
               <Bell size={18} />
             </div>
@@ -815,23 +918,24 @@ export default function Dashboard() {
           </div>
 
           {/* 2-Column Content: Left Bar Chart, Right Metrics Panel */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mt-5 items-center">
+          <div className="flex-1 flex flex-col sm:flex-row items-center justify-between gap-4 pt-3">
             {/* Left: Bar Chart with Numbers on Top of Bars */}
-            <div className="md:col-span-7 h-52 w-full">
+            <div className="flex-1 min-w-0 h-40 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={reminderDistributionData}
-                  margin={{ top: 22, right: 10, left: -22, bottom: 0 }}
+                  margin={{ top: 20, right: 6, left: -24, bottom: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                   <XAxis
                     dataKey="stage"
-                    tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }}
+                    tick={{ fontSize: 10.5, fill: '#64748b', fontWeight: 500 }}
                     axisLine={{ stroke: '#f1f5f9' }}
                     tickLine={false}
+                    interval={0}
                   />
                   <YAxis
-                    tick={{ fontSize: 11, fill: '#94a3b8' }}
+                    tick={{ fontSize: 10, fill: '#94a3b8' }}
                     axisLine={false}
                     tickLine={false}
                     allowDecimals={false}
@@ -858,16 +962,16 @@ export default function Dashboard() {
                   />
                   <Bar
                     dataKey="count"
-                    radius={[6, 6, 0, 0]}
-                    barSize={48}
+                    radius={[5, 5, 0, 0]}
+                    barSize={28}
                   >
                     <LabelList
                       dataKey="count"
                       position="top"
                       fill="#1e293b"
-                      fontSize={12}
+                      fontSize={11}
                       fontWeight={700}
-                      offset={8}
+                      offset={6}
                     />
                     {reminderDistributionData.map((entry, index) => (
                       <Cell key={`reminder-bar-${index}`} fill={entry.color} />
@@ -877,32 +981,98 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
 
-            {/* Right: 4-Row Metrics Panel matching demo specs */}
-            <div className="md:col-span-5 bg-[#f8faff] border border-blue-100/60 rounded-2xl p-4 flex flex-col justify-center divide-y divide-blue-100/50">
-              <div className="flex items-center justify-between py-2.5 first:pt-0">
-                <span className="text-xs font-medium text-slate-600">Avg Reminders per Incident</span>
-                <span className="text-sm font-bold text-slate-900">{avgRemindersPerIncident}</span>
+            {/* Right: 4-Row Metrics Panel with clean single-line labels */}
+            <div className="w-full sm:w-[195px] shrink-0 bg-[#f8faff] border border-blue-100/60 rounded-xl p-2.5 sm:p-3 flex flex-col justify-center divide-y divide-blue-100/50 text-[10.5px]">
+              <div className="flex items-center justify-between py-2 first:pt-0">
+                <span className="font-medium text-slate-600 whitespace-nowrap">Avg Reminders</span>
+                <span className="font-bold text-slate-900 ml-2">{avgRemindersPerIncident}</span>
               </div>
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-xs font-medium text-slate-600">User Response Rate (R1)</span>
-                <span className="text-sm font-bold text-slate-900">{userResponseRateR1}</span>
+              <div className="flex items-center justify-between py-2">
+                <span className="font-medium text-slate-600 whitespace-nowrap">Response Rate (R1)</span>
+                <span className="font-bold text-slate-900 ml-2">{userResponseRateR1}</span>
               </div>
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-xs font-medium text-slate-600">User Response Rate (R2)</span>
-                <span className="text-sm font-bold text-slate-900">{userResponseRateR2}</span>
+              <div className="flex items-center justify-between py-2">
+                <span className="font-medium text-slate-600 whitespace-nowrap">Response Rate (R2)</span>
+                <span className="font-bold text-slate-900 ml-2">{userResponseRateR2}</span>
               </div>
-              <div className="flex items-center justify-between py-2.5 last:pb-0">
-                <span className="text-xs font-medium text-slate-600">User Response Rate (R3)</span>
-                <span className="text-sm font-bold text-slate-900">{userResponseRateR3}</span>
+              <div className="flex items-center justify-between py-2 last:pb-0">
+                <span className="font-medium text-slate-600 whitespace-nowrap">Response Rate (R3)</span>
+                <span className="font-bold text-slate-900 ml-2">{userResponseRateR3}</span>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Resolution Outcomes Donut Card */}
+        <div className="w-full xl:w-[29.5%] min-w-0 bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+          {/* Card Header matching demo picture */}
+          <div className="flex items-center gap-3 pb-3.5 border-b border-slate-100/80">
+            <div className="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 shrink-0">
+              <Target size={18} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 tracking-tight">Resolution Outcomes</h3>
+              <p className="text-xs text-slate-400">Results from resolution agent</p>
+            </div>
+          </div>
+
+          {/* Donut Chart & Custom Legend (Vertically Centered) */}
+          <div className="flex-1 flex items-center justify-between gap-2.5 pt-3">
+            {/* Donut with center total */}
+            <div className="relative w-28 h-28 shrink-0 flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={resolutionOutcomesData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={36}
+                    outerRadius={52}
+                    strokeWidth={2}
+                    stroke="#ffffff"
+                    startAngle={90}
+                    endAngle={-270}
+                  >
+                    {resolutionOutcomesData.map((entry, index) => (
+                      <Cell key={`resolution-cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-lg font-extrabold text-slate-900 leading-none">
+                  {totalResolutionRuns.toLocaleString()}
+                </span>
+                <span className="text-[10px] font-medium text-slate-400 mt-0.5">Total Runs</span>
+              </div>
+            </div>
+
+            {/* Custom Legend */}
+            <div className="flex-1 min-w-0 space-y-2.5 pl-0.5">
+              {resolutionOutcomesData.map((item) => (
+                <div key={item.name} className="flex items-center justify-between text-xs gap-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className="w-2.5 h-2.5 rounded-sm shrink-0"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="font-medium text-slate-700 truncate">{item.name}</span>
+                  </div>
+                  <span className="font-bold text-slate-900 shrink-0 whitespace-nowrap">
+                    {item.count} <span className="font-medium text-slate-400">({item.percentage})</span>
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Row 4: Recent Agent Activity (Latest 5 Tickets) ─────────────────── */}
+      {/* ── Row 4: Recent Agent Activity (Paginated 10 per page) ─────────────────── */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
-        {/* Card Header matching demo picture */}
+        {/* Card Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100/80">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 shrink-0">
@@ -913,13 +1083,9 @@ export default function Dashboard() {
               <p className="text-xs text-slate-400">Latest agent executions across all incidents</p>
             </div>
           </div>
-          <Link
-            to="/incidents"
-            className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-blue-50/60 transition-colors group"
-          >
-            <span>View All</span>
-            <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
-          </Link>
+          <span className="text-xs font-medium text-slate-400">
+            {recentActivity.length} {recentActivity.length === 1 ? 'record' : 'records'}
+          </span>
         </div>
 
         {/* Responsive Table */}
@@ -935,14 +1101,17 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100/80">
-              {recentActivity.map((row, idx) => (
+              {paginatedActivity.map((row, idx) => (
                 <tr
                   key={row.id || idx}
                   className="hover:bg-slate-50/80 transition-colors group"
                 >
                   {/* Time */}
-                  <td className="py-3.5 px-4 text-xs text-slate-500 font-mono whitespace-nowrap">
-                    {row.time}
+                  <td
+                    className="py-3.5 px-4 text-xs text-slate-500 font-mono whitespace-nowrap"
+                    title={row.created_at ? new Date(row.created_at).toLocaleString() : row.time}
+                  >
+                    {formatActivityTime(row.created_at, row.time)}
                   </td>
 
                   {/* Incident link */}
@@ -1007,6 +1176,42 @@ export default function Dashboard() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {recentActivity.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 mt-2 border-t border-slate-100 text-xs text-slate-500">
+            <div>
+              Showing <span className="font-semibold text-slate-700">{activityStartIndex + 1}</span> to{' '}
+              <span className="font-semibold text-slate-700">
+                {Math.min(activityStartIndex + ACTIVITY_PAGE_SIZE, recentActivity.length)}
+              </span>{' '}
+              of <span className="font-semibold text-slate-700">{recentActivity.length}</span> activities
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
+                disabled={currentActivityPage <= 1}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium shadow-sm"
+              >
+                <ChevronLeft size={14} />
+                <span>Previous</span>
+              </button>
+              <span className="px-2 font-medium text-slate-600">
+                Page {currentActivityPage} of {totalActivityPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setActivityPage((p) => Math.min(totalActivityPages, p + 1))}
+                disabled={currentActivityPage >= totalActivityPages}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium shadow-sm"
+              >
+                <span>Next</span>
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
