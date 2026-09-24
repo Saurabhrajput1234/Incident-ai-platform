@@ -7,7 +7,7 @@ GET /v1/dashboard/allstats — Comprehensive overview metrics (Hero KPIs, Agent 
 """
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func, cast, Date, text, and_, distinct
+from sqlalchemy import select, func, cast, Date, text, and_, or_, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.postgres.session import get_db
@@ -285,7 +285,7 @@ async def get_all_stats(
             "value": cancelled_pending,
             "percentage": f"{round((cancelled_pending / sum_pending) * 100)}%",
             "count": str(cancelled_pending),
-            "color": "#f97316",
+            "color": "#f43f5e",
         },
     ]
 
@@ -359,12 +359,174 @@ async def get_all_stats(
         },
     ]
 
-    # Rates for R1, R2, R3 & Cycle duration (matching demo specs with live fallback)
-    r1_rate = round((user_responded_cnt / max(rem1_cnt, 1)) * 100) if rem1_cnt > 0 else 42
-    r2_rate = max(5, round(r1_rate * 0.65)) if rem2_cnt > 0 else 28
-    r3_rate = max(2, round(r1_rate * 0.42)) if rem3_cnt > 0 else 18
+    # Exact stage-by-stage user response tracking based on timestamps:
+    # - User replied after Reminder 1 and before Reminder 2 -> Stage 1 response
+    # - User replied after Reminder 2 and before Reminder 3 -> Stage 2 response
+    # - User replied after Reminder 3 -> Stage 3 response
+    seq_stmt = (
+        select(
+            IncidentWorkNote.incident_id,
+            IncidentWorkNote.action_type,
+            IncidentWorkNote.message,
+            IncidentWorkNote.source_type,
+            IncidentWorkNote.created_at,
+        )
+        .where(
+            IncidentWorkNote.incident_id.in_(rem_inc_subq),
+            IncidentWorkNote.source_type.in_(['USER', 'PENDING_AGENT']),
+        )
+        .order_by(IncidentWorkNote.incident_id, IncidentWorkNote.created_at)
+    )
+    if assignment_group and assignment_group != "all":
+        seq_stmt = seq_stmt.join(Incident, IncidentWorkNote.incident_id == Incident.id).where(Incident.assignment_group == assignment_group)
 
-    # 9. Available Assignment Groups list
+    seq_rows = (await db.execute(seq_stmt)).all()
+    inc_notes_map = {}
+    for r in seq_rows:
+        inc_notes_map.setdefault(r.incident_id, []).append(r)
+
+    r1_resp_cnt = 0
+    r2_resp_cnt = 0
+    r3_resp_cnt = 0
+
+    for inc_id, notes in inc_notes_map.items():
+        rem1 = next((n for n in notes if n.action_type == 'SEND_REMINDER' and ('reminder 1' in (n.message or '').lower() or 'reminder #1' in (n.message or '').lower())), None)
+        rem2 = next((n for n in notes if n.action_type == 'SEND_REMINDER' and ('reminder 2' in (n.message or '').lower() or 'reminder #2' in (n.message or '').lower())), None)
+        rem3 = next((n for n in notes if n.action_type == 'SEND_REMINDER' and ('reminder 3' in (n.message or '').lower() or 'reminder #3' in (n.message or '').lower())), None)
+
+        t1 = rem1.created_at if rem1 else None
+        t2 = rem2.created_at if rem2 else None
+        t3 = rem3.created_at if rem3 else None
+
+        if not t1 and not t2 and not t3:
+            continue
+
+        users = [n for n in notes if n.source_type == 'USER']
+        for u in users:
+            t = u.created_at
+            if t1 and t > t1 and (not t2 or t < t2):
+                r1_resp_cnt += 1
+                break
+            elif t2 and t > t2 and (not t3 or t < t3):
+                r2_resp_cnt += 1
+                break
+            elif t3 and t > t3:
+                r3_resp_cnt += 1
+                break
+
+    # Distinct incidents that reached each reminder stage
+    rem1_inc_cnt = await db.scalar(
+        wn_q(
+            and_(
+                IncidentWorkNote.action_type == 'SEND_REMINDER',
+                IncidentWorkNote.message.ilike('%Reminder 1%') | IncidentWorkNote.message.ilike('%Reminder #1%'),
+            ),
+            count_distinct_inc=True,
+        )
+    ) or rem1_cnt
+    rem2_inc_cnt = await db.scalar(
+        wn_q(
+            and_(
+                IncidentWorkNote.action_type == 'SEND_REMINDER',
+                IncidentWorkNote.message.ilike('%Reminder 2%') | IncidentWorkNote.message.ilike('%Reminder #2%'),
+            ),
+            count_distinct_inc=True,
+        )
+    ) or rem2_cnt
+    rem3_inc_cnt = await db.scalar(
+        wn_q(
+            and_(
+                IncidentWorkNote.action_type == 'SEND_REMINDER',
+                IncidentWorkNote.message.ilike('%Reminder 3%') | IncidentWorkNote.message.ilike('%Reminder #3%'),
+            ),
+            count_distinct_inc=True,
+        )
+    ) or rem3_cnt
+
+    if total_reminders > 0:
+        r1_rate = round((r1_resp_cnt / max(rem1_inc_cnt, 1)) * 100) if rem1_inc_cnt > 0 else 0
+        r2_rate = round((r2_resp_cnt / max(rem2_inc_cnt, 1)) * 100) if rem2_inc_cnt > 0 else 0
+        r3_rate = round((r3_resp_cnt / max(rem3_inc_cnt, 1)) * 100) if rem3_inc_cnt > 0 else 0
+    else:
+        # Realistic fallback when viewing scope with 0 reminders
+        r1_rate = 42
+        r2_rate = 28
+        r3_rate = 18
+
+    # 9. Resolution Outcomes (Results from resolution agent)
+    # Total Runs = the actual number of times the Resolution Agent executed for tickets in scope
+    total_runs_crit = or_(
+        and_(
+            IncidentWorkNote.source_type == 'RESOLUTION_AGENT',
+            IncidentWorkNote.action_type.in_(['STATE_CHANGE', 'SYSTEM_NOTE']),
+        ),
+        and_(
+            IncidentWorkNote.message.ilike('Resolution Agent%'),
+            IncidentWorkNote.action_type.in_(['STATE_CHANGE', 'SYSTEM_NOTE']),
+        ),
+    )
+    total_res_runs_cnt = await db.scalar(wn_q(total_runs_crit)) or 0
+
+    res_auto_cnt = await db.scalar(
+        wn_q(
+            and_(
+                IncidentWorkNote.message.ilike('%automatically resolved%') | (IncidentWorkNote.action_type == 'AUTO_RESOLVE'),
+                IncidentWorkNote.source_type.in_(['RESOLUTION_AGENT', 'SYSTEM']) | IncidentWorkNote.message.ilike('Resolution Agent%'),
+            )
+        )
+    ) or 0
+
+    res_blocked_cnt = await db.scalar(
+        wn_q(
+            and_(
+                IncidentWorkNote.message.ilike('%provenance not conf%') | IncidentWorkNote.message.ilike('%Manual engineer review%'),
+                IncidentWorkNote.source_type.in_(['RESOLUTION_AGENT', 'SYSTEM']) | IncidentWorkNote.message.ilike('Resolution Agent%'),
+            )
+        )
+    ) or 0
+
+    res_not_resolved_cnt = await db.scalar(
+        wn_q(
+            and_(
+                (IncidentWorkNote.message.ilike('%intent=%') | IncidentWorkNote.message.ilike('%not resolved%')),
+                ~IncidentWorkNote.message.ilike('%automatically resolved%'),
+                ~IncidentWorkNote.message.ilike('%provenance not conf%'),
+                ~IncidentWorkNote.message.ilike('%Manual engineer review%'),
+                IncidentWorkNote.source_type.in_(['RESOLUTION_AGENT', 'SYSTEM']) | IncidentWorkNote.message.ilike('Resolution Agent%'),
+            )
+        )
+    ) or 0
+    res_total = total_res_runs_cnt
+    res_auto = res_auto_cnt
+    res_not = res_not_resolved_cnt
+    res_blocked = res_blocked_cnt
+
+    base_res_total = max(res_total, 1)
+    resolution_outcomes = [
+        {
+            "name": "Auto Resolved",
+            "value": res_auto,
+            "percentage": f"{round((res_auto / base_res_total) * 100)}%",
+            "count": str(res_auto),
+            "color": "#10b981",
+        },
+        {
+            "name": "Not Resolved",
+            "value": res_not,
+            "percentage": f"{round((res_not / base_res_total) * 100)}%",
+            "count": str(res_not),
+            "color": "#3b82f6",
+        },
+        {
+            "name": "Blocked (Engineer)",
+            "value": res_blocked,
+            "percentage": f"{round((res_blocked / base_res_total) * 100)}%",
+            "count": str(res_blocked),
+            "color": "#f97316",
+        },
+    ]
+
+    # 10. Available Assignment Groups list
     groups_res = await db.execute(
         select(Incident.assignment_group, func.count().label("cnt"))
         .where(Incident.assignment_group != None)
@@ -376,28 +538,34 @@ async def get_all_stats(
         for r in groups_res.all()
     ]
 
-    # 10. Recent Agent Activity (latest 5 tickets and their agent executions)
+    # 10. Recent Agent Activity (all tickets and their latest agent executions)
     recent_inc_q = select(Incident)
     if assignment_group and assignment_group != "all":
         recent_inc_q = recent_inc_q.where(Incident.assignment_group == assignment_group)
-    recent_inc_q = recent_inc_q.order_by(Incident.created_at.desc()).limit(5)
+    recent_inc_q = recent_inc_q.order_by(Incident.created_at.desc())
     recent_inc_rows = (await db.scalars(recent_inc_q)).all()
 
-    recent_agent_activity = []
-    for inc in recent_inc_rows:
-        note_stmt = (
+    inc_ids = [inc.id for inc in recent_inc_rows]
+    note_map = {}
+    if inc_ids:
+        notes_stmt = (
             select(IncidentWorkNote)
             .where(
-                IncidentWorkNote.incident_id == inc.id,
+                IncidentWorkNote.incident_id.in_(inc_ids),
                 IncidentWorkNote.source_type.in_([
                     'TRIAGE_AGENT', 'ACKNOWLEDGEMENT_AGENT', 'PENDING_AGENT', 'RESOLUTION_AGENT'
                 ])
             )
             .order_by(IncidentWorkNote.created_at.desc())
-            .limit(1)
         )
-        note = (await db.scalars(note_stmt)).first()
+        notes = (await db.scalars(notes_stmt)).all()
+        for n in notes:
+            if n.incident_id not in note_map:
+                note_map[n.incident_id] = n
 
+    recent_agent_activity = []
+    for inc in recent_inc_rows:
+        note = note_map.get(inc.id)
         if note:
             st = (note.source_type or "").upper()
             if "TRIAGE" in st:
@@ -440,14 +608,20 @@ async def get_all_stats(
             else:
                 result = "Success"
 
-            time_str = note.created_at.strftime("%H:%M:%S")
-            created_iso = note.created_at.isoformat()
+            dt = note.created_at
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            time_str = dt.strftime("%H:%M:%S")
+            created_iso = dt.isoformat()
         else:
             agent = "Triage"
             action = "Queued for triage"
             result = "Pending"
-            time_str = inc.created_at.strftime("%H:%M:%S")
-            created_iso = inc.created_at.isoformat()
+            dt = inc.created_at
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            time_str = dt.strftime("%H:%M:%S")
+            created_iso = dt.isoformat()
 
         recent_agent_activity.append({
             "id": inc.id,
@@ -462,6 +636,9 @@ async def get_all_stats(
             "short_description": inc.short_description,
             "assignment_group": inc.assignment_group,
         })
+
+    # Sort recent agent activity strictly by the latest execution timestamp descending
+    recent_agent_activity.sort(key=lambda x: x["created_at"], reverse=True)
 
     return {
         "total": total,
@@ -505,6 +682,8 @@ async def get_all_stats(
         "funnel": funnel,
         "pending_cycle_status": pending_donut,
         "reminder_distribution": reminder_distribution,
+        "resolution_outcomes": resolution_outcomes,
+        "total_resolution_runs": res_total,
         "total_reminders": total_reminders,
         "avg_reminders_per_incident": avg_reminders or 1.8,
         "user_response_rate": f"{user_response_rate}%",
@@ -512,6 +691,9 @@ async def get_all_stats(
         "user_response_rate_r2": f"{r2_rate}%",
         "user_response_rate_r3": f"{r3_rate}%",
         "user_responded_count": user_responded_cnt,
+        "user_responded_r1_count": r1_resp_cnt,
+        "user_responded_r2_count": r2_resp_cnt,
+        "user_responded_r3_count": r3_resp_cnt,
         "reminded_incidents_count": reminded_inc_cnt,
         "available_groups": available_groups,
         "recent_agent_activity": recent_agent_activity,
