@@ -52,3 +52,7 @@ app.add_exception_handler(Exception, general_exception_handler)
 
 # Routers
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+# WebSocket routes
+from app.api.ws.incidents import router as ws_router
+app.include_router(ws_router)

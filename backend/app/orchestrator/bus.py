@@ -2,7 +2,8 @@
 In-process async event bus.
 
 - Handlers registered per event type.
-- All handlers for one event run concurrently (asyncio.gather).
+- All handlers for one event are fired as background asyncio tasks.
+- The caller returns immediately — handlers run concurrently without blocking.
 - One handler failing does NOT block the others.
 - No external infrastructure required.
 """
@@ -28,18 +29,24 @@ class EventBus:
             logger.debug("[EventBus] No handlers for %s", type(event).__name__)
             return
 
-        logger.info("[EventBus] Publishing %s to %d handler(s)", type(event).__name__, len(handlers))
-        results = await asyncio.gather(
-            *[handler(event) for handler in handlers],
-            return_exceptions=True,
+        logger.info("[EventBus] Publishing %s to %d handler(s) (fire-and-forget)", type(event).__name__, len(handlers))
+
+        # Fire each handler as a background task so the caller returns immediately.
+        # This ensures the API response is not blocked by agent execution.
+        for handler in handlers:
+            asyncio.ensure_future(_run_handler(handler, event))
+
+
+async def _run_handler(handler: Callable, event: Any) -> None:
+    """Run a single handler and log any exceptions."""
+    try:
+        await handler(event)
+    except Exception as exc:
+        logger.error(
+            "[EventBus] Handler %s failed for %s: %s",
+            handler.__qualname__, type(event).__name__, exc,
+            exc_info=True,
         )
-        for handler, result in zip(handlers, results):
-            if isinstance(result, Exception):
-                logger.error(
-                    "[EventBus] Handler %s failed for %s: %s",
-                    handler.__qualname__, type(event).__name__, result,
-                    exc_info=result,
-                )
 
 
 # Singleton — imported everywhere

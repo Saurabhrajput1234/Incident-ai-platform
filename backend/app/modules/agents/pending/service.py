@@ -202,24 +202,24 @@ class PendingService:
         # (i.e. notes written BEFORE the state change chronologically)
         prior_notes = all_notes[state_change_idx + 1:]
 
-        # Find the most recent substantive ENGINEER note before the state change
-        engineer_note = None
-        for note in prior_notes:
-            src = note.source_type if isinstance(note.source_type, str) else note.source_type.value
-            act = note.action_type if isinstance(note.action_type, str) else (note.action_type.value if note.action_type else "")
-            if src == WorkNoteSourceType.ENGINEER.value and act in (
-                WorkNoteActionType.MANUAL_NOTE.value,
-                WorkNoteActionType.ASSIGN_ENGINEER.value,
-                WorkNoteActionType.SYSTEM_NOTE.value,
-            ):
-                engineer_note = note
-                break
-
-        if engineer_note is None:
-            # Engineer changed state without any prior substantive note → no cycle
+        # Check only the immediately previous note (the one right before the state change)
+        if not prior_notes:
+            # No notes before the state change → engineer changed state without any prior note
             logger.info(
-                "[PendingService] %s — No prior engineer work note found before state change. Skipping cycle.",
+                "[PendingService] %s — No prior work note found before state change. Skipping cycle.",
                 incident.incident_number,
+            )
+            return False
+
+        engineer_note = prior_notes[0]  # Take the first (most recent) prior note
+        
+        # Verify it's from the engineer
+        src = engineer_note.source_type if isinstance(engineer_note.source_type, str) else engineer_note.source_type.value
+        if src != WorkNoteSourceType.ENGINEER.value:
+            # Most recent prior note is NOT from engineer → skip
+            logger.info(
+                "[PendingService] %s — Most recent prior note is from %s, not engineer. Skipping cycle.",
+                incident.incident_number, src,
             )
             return False
 

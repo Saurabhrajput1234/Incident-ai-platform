@@ -58,6 +58,7 @@ export const rosterApi = {
 
 // ── Dashboard ──────────────────────────────────────────
 export const dashboardApi = {
+  statsagent: (params) => api.get('/dashboard/stats', { params }).then(r => r.data),
   stats: (params) => api.get('/dashboard/allstats', { params }).then(r => r.data),
   allstats: (params) => api.get('/dashboard/allstats', { params }).then(r => r.data),
   trends: () => api.get('/dashboard/trends').then(r => r.data),
@@ -65,6 +66,8 @@ export const dashboardApi = {
   byPriority: () => api.get('/dashboard/by-priority').then(r => r.data),
   byState: () => api.get('/dashboard/by-state').then(r => r.data),
   triageLogs: () => api.get('/dashboard/triage-logs').then(r => r.data),
+  triageStats: () => api.get('/dashboard/triage-stats').then(r => r.data),
+  ackStats: () => api.get('/dashboard/ack-stats').then(r => r.data),
 }
 
 // ── Work Notes ─────────────────────────────────────────

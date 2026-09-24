@@ -87,6 +87,71 @@ export default function IncidentDetail() {
     prevAssignedTo.current = curr
   }, [incident?.assigned_to])
 
+  const [agentPopup, setAgentPopup] = useState(null)
+  const [toasts, setToasts] = useState([])
+
+  const showAgentPopup = (note) => {
+    const agentConfig = {
+      'TRIAGE_AGENT':          { title: 'Triage Agent',           action: 'Engineer assigned to incident' },
+      'ACKNOWLEDGEMENT_AGENT': { title: 'Acknowledgement Agent',  action: 'Acknowledgement email sent to user' },
+      'PENDING_AGENT':         { title: 'Pending Agent',          action: 'Reminder cycle updated' },
+      'RESOLUTION_AGENT':      { title: 'Resolution Agent',       action: 'User response processed' },
+      'ENGINEER':              { title: 'Engineer',               action: 'Work note added' },
+      'SYSTEM':                { title: 'System',                 action: 'System event recorded' },
+      'USER':                  { title: 'User',                   action: 'User responded' },
+    }
+    const config = agentConfig[note.source_type] ?? agentConfig['SYSTEM']
+    const toastId = Date.now()
+
+    // Prepend so newest is always on top
+    setToasts(prev => [{ id: toastId, title: config.title, action: config.action, message: note.message }, ...prev])
+
+    // Auto-remove after 8 seconds
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== toastId))
+    }, 5000)
+  }
+
+  // WebSocket connection for real-time work note updates — CONNECT IMMEDIATELY
+  useEffect(() => {
+    if (!id) return
+
+    const ws = new WebSocket(`ws://localhost:3000/ws/incidents/${id}`)
+
+    ws.onopen = () => {
+      console.log('[WebSocket] Connected to incident', id)
+      // Force refresh work notes once connected
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ['work-notes', id] })
+      }, 100)
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data.type === 'WORK_NOTE_ADDED') {
+          showAgentPopup(data.work_note)
+          qc.invalidateQueries({ queryKey: ['work-notes', id] })
+          qc.invalidateQueries({ queryKey: ['incident', id] })
+        }
+      } catch (e) {
+        console.error('[WebSocket] Parse error:', e)
+      }
+    }
+
+    ws.onerror = (error) => {
+      console.error('[WebSocket] Error:', error)
+    }
+
+    ws.onclose = () => {
+      console.log('[WebSocket] Disconnected')
+    }
+
+    return () => {
+      ws.close()
+    }
+  }, [id])
+
   const triageMut = useMutation({
     mutationFn: () => triageApi.run(id),
     onSuccess: (res) => {
@@ -372,21 +437,33 @@ export default function IncidentDetail() {
         />
       )}
 
-      {/* Triage completion toast — slides in from top */}
+      {/* Triage completion toast — top right */}
       {triagePopup && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md mx-auto px-4 animate-slide-down">
-          <div className="bg-green-600 text-white rounded-lg shadow-lg px-5 py-3.5 flex items-center gap-3">
-            <CheckCircle size={20} className="shrink-0" />
+        <div className="fixed top-4 right-4 z-50 w-96">
+          <div className="bg-green-400 text-white rounded-lg shadow-xl p-4 flex items-start gap-3">
+            <CheckCircle size={18} className="shrink-0 mt-0.5 text-green-300" />
             <div className="flex-1 text-sm">
-              <p className="font-semibold">Triage complete — assigned to {triagePopup.assignedTo}</p>
+              <p className="font-semibold leading-snug">Triage Agent</p>
+              <p className="text-green-200 text-xs font-medium mt-0.5">Assigned to {triagePopup.assignedTo}</p>
               {triagePopup.assignmentGroup && (
-                <p className="text-green-100 text-xs mt-0.5">{triagePopup.assignmentGroup} · Reloading…</p>
+                <p className="text-green-100 text-xs mt-1.5">{triagePopup.assignmentGroup}</p>
               )}
             </div>
             <Spinner size="sm" />
           </div>
         </div>
       )}
+
+      {/* Agent event toasts — newest on top, top-right, professional */}
+      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 w-96 pointer-events-none">
+        {toasts.map((toast) => (
+          <ToastCard
+            key={toast.id}
+            toast={toast}
+            onDismiss={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+          />
+        ))}
+      </div>
     </div>
   )
 }
@@ -398,6 +475,48 @@ function Card({ title, children }) {
         <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
       </div>
       <div className="p-4">{children}</div>
+    </div>
+  )
+}
+
+const TOAST_DURATION = 5000 // ms
+
+function ToastCard({ toast, onDismiss }) {
+  return (
+    <div className="bg-green-700 text-white rounded-lg shadow-xl overflow-hidden pointer-events-auto">
+      {/* Content */}
+      <div className="flex items-start gap-3 p-4">
+        <CheckCircle size={18} className="shrink-0 mt-0.5 text-green-300" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold leading-snug">{toast.title}</p>
+          <p className="text-xs text-green-200 mt-0.5 font-medium">{toast.action}</p>
+          <p className="text-xs text-green-100 mt-1.5 leading-relaxed line-clamp-2">
+            {toast.message.substring(0, 120)}{toast.message.length > 120 ? '…' : ''}
+          </p>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="shrink-0 ml-1 p-1 rounded hover:bg-green-600 text-green-300 hover:text-white transition-colors"
+          title="Dismiss"
+        >
+          <X size={15} />
+        </button>
+      </div>
+      {/* Progress bar — drains left to right over TOAST_DURATION ms */}
+      <div className="h-1 bg-green-900">
+        <div
+          className="h-1 bg-green-300 origin-left"
+          style={{
+            animation: `toast-drain ${TOAST_DURATION}ms linear forwards`,
+          }}
+        />
+      </div>
+      <style>{`
+        @keyframes toast-drain {
+          from { transform: scaleX(1); }
+          to   { transform: scaleX(0); }
+        }
+      `}</style>
     </div>
   )
 }
