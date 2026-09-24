@@ -55,7 +55,7 @@ function Card({ title, icon, children }) {
 export default function Agents() {
   const [tab, setTab] = useState('overview')
 
-  const { data: stats, isLoading: sl } = useQuery({ queryKey: ['dash-stats'], queryFn: dashboardApi.stats, refetchInterval: 30000 })
+  const { data: stats, isLoading: sl } = useQuery({ queryKey: ['dash-stats'], queryFn: dashboardApi.statsagent, refetchInterval: 30000 })
   const { data: trends } = useQuery({ queryKey: ['dash-trends'], queryFn: dashboardApi.trends, refetchInterval: 60000 })
   const { data: byPriority } = useQuery({ queryKey: ['dash-priority'], queryFn: dashboardApi.byPriority, refetchInterval: 60000 })
   const { data: byState } = useQuery({ queryKey: ['dash-state'], queryFn: dashboardApi.byState, refetchInterval: 60000 })

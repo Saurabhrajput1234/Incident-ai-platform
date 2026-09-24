@@ -115,6 +115,9 @@ class WorkNoteService:
             note.id, incident_id, source_type, source_name, action_type,
         )
 
+        # --- Step 1.5: Broadcast WebSocket event (real-time) ---
+        await self._broadcast_work_note(incident_id, note, source_type_val=source_type.value if hasattr(source_type, "value") else str(source_type))
+
         # --- Step 2: Fetch current incident state for the event payload ---
         # We snapshot state NOW (before any auto-activation) so the event
         # reflects what state the incident was in when the note was written.
@@ -277,3 +280,28 @@ class WorkNoteService:
                 header += f" | {n.action_type}"
             blocks.append(f"{header}\n{n.message}")
         return f"\n\n{sep}\n\n".join(blocks) if blocks else ""
+
+    # ------------------------------------------------------------------
+    # Private: WebSocket broadcasting
+    # ------------------------------------------------------------------
+
+    async def _broadcast_work_note(self, incident_id: str, note: IncidentWorkNote, source_type_val: str) -> None:
+        """Broadcast work note to WebSocket clients in real-time"""
+        try:
+            from app.api.ws.manager import broadcast
+
+            event = {
+                "type": "WORK_NOTE_ADDED",
+                "work_note": {
+                    "id": note.id,
+                    "source_type": source_type_val,
+                    "source_name": note.source_name,
+                    "action_type": note.action_type,
+                    "message": note.message[:200] if len(note.message) > 200 else note.message,  # Truncate for preview
+                    "created_at": note.created_at.isoformat(),
+                }
+            }
+            await broadcast(incident_id, event)
+        except Exception as e:
+            logger.warning(f"[WebSocket] Failed to broadcast work note: {e}")
+
