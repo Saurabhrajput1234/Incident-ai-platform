@@ -15,14 +15,11 @@ SYSTEM_PROMPT = """You are an expert IT Support Intent Classifier for Salesforce
 Analyze the full incoming IT incident context (Assignment Group, Category, Subcategory, Short Description, Description) and classify it into EXACTLY ONE of the following categories:
 
 1. SALESFORCE_INCORRECT_REQUEST: The user is requesting Salesforce access, profile updates, role permissions, module mapping access, or is unable to download/access Salesforce.com GTS (EANZ) & GEM apps/modules via an Incident ticket form instead of an Application Access Request (RITM).
-2. WRONG_REQUEST: The ticket is submitted under an incorrect assignment group, wrong org (e.g. EMEA org sandbox, staging), or wrong system environment.
-3. ACCESS_REQUEST: General non-Salesforce system permission, SAP role, or DB access authorization request.
-4. SERVICE_REQUEST: Hardware order, software license installation, or service catalog item request.
-5. STANDARD_INCIDENT: Standard technical break/fix issue, system outage, blue screen crash, or infrastructure disruption requiring engineer manual investigation.
+2. STANDARD_INCIDENT: Standard technical break/fix issue, system outage, blue screen crash, infrastructure disruption, or any other request requiring standard engineer investigation.
 
 Respond ONLY with a valid JSON object in this format:
 {
-  "intent": "SALESFORCE_INCORRECT_REQUEST" | "WRONG_REQUEST" | "ACCESS_REQUEST" | "SERVICE_REQUEST" | "STANDARD_INCIDENT",
+  "intent": "SALESFORCE_INCORRECT_REQUEST" | "STANDARD_INCIDENT",
   "confidence": 0.95,
   "reasoning": "Clear 1-sentence technical explanation of why this category was selected based on ticket context"
 }
@@ -70,8 +67,8 @@ class IntentClassifier:
             parsed = json.loads(clean_json)
             intent_val = parsed.get("intent", "STANDARD_INCIDENT")
 
-            if intent_val in IntentType.__members__:
-                intent_enum = IntentType(intent_val)
+            if intent_val == IntentType.SALESFORCE_INCORRECT_REQUEST.value or intent_val == "SALESFORCE_INCORRECT_REQUEST":
+                intent_enum = IntentType.SALESFORCE_INCORRECT_REQUEST
             else:
                 intent_enum = IntentType.STANDARD_INCIDENT
 
