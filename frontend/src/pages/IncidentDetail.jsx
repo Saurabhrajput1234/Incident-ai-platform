@@ -377,7 +377,13 @@ export default function IncidentDetail() {
           <Card title="Classification">
             <dl className="space-y-2 text-sm">
               <Row icon={<Tag size={13} />} label="Priority"><PriorityBadge value={incident.priority} /></Row>
-              <Row icon={<RefreshCw size={13} />} label="State"><StateBadge value={incident.state} /></Row>
+              <Row icon={<RefreshCw size={13} />} label="State">
+                <InlineStateSelect
+                  value={incident.state}
+                  onChange={(newState) => updateMut.mutate({ state: newState })}
+                  disabled={updateMut.isPending}
+                />
+              </Row>
               {activeCycle && (
                 <Row icon={<Clock size={13} />} label="Pending Cycle">
                   <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
@@ -464,6 +470,50 @@ export default function IncidentDetail() {
           />
         ))}
       </div>
+    </div>
+  )
+}
+
+const STATE_OPTIONS = [
+  { value: 'new', label: 'New' },
+  { value: 'in_progress', label: 'Active' },
+  { value: 'on_hold', label: 'Pending' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'cancelled', label: 'Cancelled' },
+]
+
+function InlineStateSelect({ value, onChange, disabled }) {
+  const [open, setOpen] = useState(false)
+  const current = STATE_OPTIONS.find(o => o.value === value) ?? { label: value }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        disabled={disabled}
+        className="flex items-center gap-1 focus:outline-none"
+        title="Click to change state"
+      >
+        <StateBadge value={value} />
+        <Pencil size={11} className="text-gray-400 hover:text-gray-600" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[130px]">
+            {STATE_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => { onChange(opt.value); setOpen(false) }}
+                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 ${opt.value === value ? 'font-semibold text-blue-600' : 'text-gray-700'}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -659,10 +709,19 @@ function EditModal({ incident, onClose, onSave, isSaving, saveError }) {
   })
 
   const onSubmit = (data) => {
-    const cleaned = Object.fromEntries(
-      Object.entries(data).map(([k, v]) => [k, v === '' ? null : v])
+    // Only send fields that actually changed — prevents spurious work notes
+    const changed = Object.fromEntries(
+      Object.entries(data).filter(([k, v]) => {
+        const original = incident[k] ?? ''
+        const submitted = v ?? ''
+        return String(submitted) !== String(original)
+      }).map(([k, v]) => [k, v === '' ? null : v])
     )
-    onSave(cleaned)
+    if (Object.keys(changed).length === 0) {
+      onClose()
+      return
+    }
+    onSave(changed)
   }
 
   return (

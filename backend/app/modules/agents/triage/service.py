@@ -120,23 +120,44 @@ class TriageService:
         context_date: date | None = None,
         apply_recommendation: bool = True,
         force: bool = False,
+        preserve_state: bool = False,
+        retriage_reason: str | None = None,
     ) -> AgentResponse:
         """
         Full triage flow.
-        Pass force=True to re-assign even if an engineer is already set.
-        Acknowledgement is triggered by the event bus after assignment.
+
+        Parameters
+        ----------
+        force           : Re-assign even if an engineer is already set.
+        preserve_state  : When True (re-triage), skip the final state→in_progress update.
+                          State remains exactly as it was before triage ran.
+        retriage_reason : "engineer_removed" | "group_changed" — used in work note message.
         """
         if context_date is None:
             context_date = datetime.now(timezone.utc).date()
 
         incident = await self.incident_service.get_incident(incident_id)
-        if incident.state not in ("new", "in_progress"):
-            return AgentResponse(
-                success=False,
-                agent_name="TriageAgent",
-                reasoning=f"Incident is in state '{incident.state}' — triage only runs for new or in_progress incidents",
-                errors=[f"Invalid state for triage: {incident.state}"],
-            )
+
+        # Original creation triage: only run for new/in_progress
+        # Re-triage (preserve_state=True): run for any non-terminal state
+        terminal_states = {"resolved", "closed", "cancelled"}
+        if preserve_state:
+            if incident.state in terminal_states:
+                return AgentResponse(
+                    success=False,
+                    agent_name="TriageAgent",
+                    reasoning=f"Incident is in terminal state '{incident.state}' — re-triage skipped",
+                    errors=[f"Cannot re-triage a {incident.state} incident"],
+                )
+        else:
+            if incident.state not in ("new", "in_progress"):
+                return AgentResponse(
+                    success=False,
+                    agent_name="TriageAgent",
+                    reasoning=f"Incident is in state '{incident.state}' — triage only runs for new or in_progress incidents",
+                    errors=[f"Invalid state for triage: {incident.state}"],
+                )
+
         if incident.assigned_to and not force:
             return AgentResponse(
                 success=False,
@@ -234,19 +255,18 @@ class TriageService:
             eng = assignment.engineer
 
             # Step 5a: Persist assigned_to FIRST (no state change, no event fired).
-            # This ensures ACK agent sees the correct engineer when it reads the incident.
             await self.incident_service.update_incident_internal(
                 incident.id,
                 IncidentUpdate(assigned_to=eng.name),
                 changed_by="TRIAGE_AGENT",
             )
 
-            # Step 5b: Write ASSIGN_ENGINEER work note so it's committed before the
-            # state change event triggers AcknowledgementHandler concurrently.
+            # Step 5b: Write ASSIGN_ENGINEER work note.
+            retriage_prefix = f"[Re-triage: {retriage_reason}] " if retriage_reason else ""
             await self.work_note_svc.add_note(
                 incident_id=incident.id,
                 message=(
-                    f"Assigned to {eng.name} "
+                    f"{retriage_prefix}Assigned to {eng.name} "
                     f"(shift={eng.current_shift}, active_now={eng.is_shift_active}, group={group}). "
                     f"{'Group resolved by LLM. ' if llm_used else ''}"
                     f"{assignment.reason}"
@@ -258,19 +278,21 @@ class TriageService:
                 auto_activate=False,
             )
 
-            # Step 5c: Now update state to in_progress — this publishes
-            # IncidentStateChangedEvent(→ in_progress, changed_by=TriageAgent)
-            # which triggers AcknowledgementHandler. At this point:
-            #   - assigned_to is already set in DB
-            #   - ASSIGN_ENGINEER work note is already committed
-            # So ACK sees a complete, correctly-ordered audit trail.
-            await self.incident_service.update_incident_internal(
-                incident.id,
-                IncidentUpdate(state="in_progress"),
-                changed_by="TRIAGE_AGENT",  # AcknowledgementHandler listens for this
-            )
+            # Step 5c: State transition — ONLY for original creation triage.
+            # Re-triage (preserve_state=True) must NOT change the incident state.
+            if not preserve_state:
+                # Publishes IncidentStateChangedEvent(→ in_progress, changed_by=TriageAgent)
+                # which triggers AcknowledgementHandler.
+                await self.incident_service.update_incident_internal(
+                    incident.id,
+                    IncidentUpdate(state="in_progress"),
+                    changed_by="TRIAGE_AGENT",
+                )
 
-            logger.info(f"[TriageService] {incident.incident_number} assigned to {eng.name}")
+            logger.info(
+                "[TriageService] %s assigned to %s (preserve_state=%s)",
+                incident.incident_number, eng.name, preserve_state,
+            )
 
         triage_result = TriageResult(**agent_response.result)
         eng = assignment.engineer

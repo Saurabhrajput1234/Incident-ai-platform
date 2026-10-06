@@ -20,8 +20,12 @@ app/api/v1/incidents.py
 app/api/v1/pending.py
 app/api/v1/resolution.py
 app/api/v1/shift_roster.py
+app/api/v1/stats.py
 app/api/v1/triage.py
 app/api/v1/work_notes.py
+app/api/ws/__init__.py
+app/api/ws/incidents.py
+app/api/ws/manager.py
 app/common/constants/app.py
 app/common/enums/base.py
 app/common/exceptions/base.py

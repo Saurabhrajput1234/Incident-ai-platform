@@ -119,32 +119,99 @@ class IncidentService:
             return IncidentResponse.model_validate(existing)
 
         old_state: str = str(existing.state.value if hasattr(existing.state, "value") else existing.state)
+        old_group: str | None = existing.assignment_group
         new_state: str | None = (
             str(update_data["state"].value if hasattr(update_data.get("state"), "value") else update_data["state"])
             if "state" in update_data else None
         )
 
+        # Detect re-triage scenarios BEFORE saving
+        group_changed = (
+            "assignment_group" in update_data
+            and update_data["assignment_group"]
+            and update_data["assignment_group"] != old_group
+        )
+        engineer_removed = (
+            "assigned_to" in update_data
+            and not update_data["assigned_to"]  # cleared to null/empty
+        )
+
+        # Capture old values BEFORE the DB update — repo.update() refreshes the object
+        old_assigned_to: str | None = existing.assigned_to
+
+        # When group changes, also clear the engineer — wrong group = wrong engineer
+        if group_changed and "assigned_to" not in update_data:
+            update_data["assigned_to"] = None
+
         incident = await self.repo.update(existing.id, update_data)
         logger.info(f"Incident updated: {incident.incident_number}")
 
-        if "state" in update_data:
-            action = WorkNoteActionType.STATE_CHANGE
-            msg = f"State changed to: {new_state}"
-        elif "assigned_to" in update_data:
-            action = WorkNoteActionType.ASSIGN_ENGINEER
-            msg = f"Assigned to: {update_data['assigned_to']}"
-        else:
-            action = WorkNoteActionType.INCIDENT_UPDATE
-            msg = f"Fields updated: {', '.join(update_data.keys())}"
+        # Write a separate work note for each meaningful change
 
-        await self.work_note_svc.add_note(
-            incident_id=existing.id,
-            message=msg,
-            source_type=WorkNoteSourceType.ENGINEER,
-            source_name=existing.assigned_to or "Engineer",
-            action_type=action,
-            auto_activate=False,
-        )
+        # 1. State change
+        if "state" in update_data and new_state != old_state:
+            await self.work_note_svc.add_note(
+                incident_id=existing.id,
+                message=f"State changed from {old_state} to {new_state}.",
+                source_type=WorkNoteSourceType.ENGINEER,
+                source_name=old_assigned_to or "Engineer",
+                action_type=WorkNoteActionType.STATE_CHANGE,
+                auto_activate=False,
+            )
+
+        # 2. Engineer removed
+        if engineer_removed:
+            await self.work_note_svc.add_note(
+                incident_id=existing.id,
+                message=(
+                    f"Engineer removed: {old_assigned_to} has been unassigned from this incident.\n"
+                    f"Triage Agent will automatically re-assign a new engineer."
+                ),
+                source_type=WorkNoteSourceType.ENGINEER,
+                source_name=old_assigned_to or "Engineer",
+                action_type=WorkNoteActionType.ASSIGN_ENGINEER,
+                auto_activate=False,
+            )
+
+        # 3. Assignment group changed (also clears engineer)
+        if group_changed:
+            old_eng = old_assigned_to or "none"
+            await self.work_note_svc.add_note(
+                incident_id=existing.id,
+                message=(
+                    f"Assignment group changed from '{old_group or 'none'}' to '{update_data['assignment_group']}'.\n"
+                    f"Previous engineer ({old_eng}) has been unassigned.\n"
+                    f"Triage Agent will automatically assign a new engineer for the updated group."
+                ),
+                source_type=WorkNoteSourceType.ENGINEER,
+                source_name=old_assigned_to or "Engineer",
+                action_type=WorkNoteActionType.GROUP_RESOLVED,
+                auto_activate=False,
+            )
+
+        # 4. Engineer manually assigned (not removed, not part of group change)
+        if "assigned_to" in update_data and update_data["assigned_to"] and not group_changed:
+            await self.work_note_svc.add_note(
+                incident_id=existing.id,
+                message=f"Manually assigned to: {update_data['assigned_to']}.",
+                source_type=WorkNoteSourceType.ENGINEER,
+                source_name=old_assigned_to or "Engineer",
+                action_type=WorkNoteActionType.ASSIGN_ENGINEER,
+                auto_activate=False,
+            )
+
+        # 5. General field update — only fields that are not triage/system fields
+        _skip_fields = {"assigned_to", "assignment_group", "state", "updated_at", "work_notes"}
+        other_fields = [k for k in update_data.keys() if k not in _skip_fields]
+        if other_fields and not group_changed and not engineer_removed:
+            await self.work_note_svc.add_note(
+                incident_id=existing.id,
+                message=f"Fields updated: {', '.join(other_fields)}.",
+                source_type=WorkNoteSourceType.ENGINEER,
+                source_name=old_assigned_to or "Engineer",
+                action_type=WorkNoteActionType.INCIDENT_UPDATE,
+                auto_activate=False,
+            )
 
         # Publish state change event — handlers decide what to do
         if new_state is not None and new_state != old_state:
@@ -154,6 +221,26 @@ class IncidentService:
                 old_state=old_state,
                 new_state=new_state,
                 changed_by="ENGINEER",
+            )
+
+        # Re-triage: engineer removed
+        if engineer_removed and not group_changed:
+            current_state = new_state or old_state
+            await self._publish_retriage(
+                incident_id=existing.id,
+                incident_number=incident.incident_number,
+                reason="engineer_removed",
+                current_state=current_state,
+            )
+
+        # Re-triage: assignment group changed (takes priority over engineer_removed)
+        if group_changed:
+            current_state = new_state or old_state
+            await self._publish_retriage(
+                incident_id=existing.id,
+                incident_number=incident.incident_number,
+                reason="group_changed",
+                current_state=current_state,
             )
 
         return IncidentResponse.model_validate(incident)
@@ -281,6 +368,26 @@ class IncidentService:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    async def _publish_retriage(
+        self,
+        incident_id: str,
+        incident_number: str,
+        reason: str,
+        current_state: str,
+    ) -> None:
+        from app.orchestrator.bus import event_bus
+        from app.orchestrator.events import ReTriageRequestedEvent
+        await event_bus.publish(ReTriageRequestedEvent(
+            incident_id=incident_id,
+            incident_number=incident_number,
+            reason=reason,
+            current_state=current_state,
+        ))
+        logger.info(
+            "[IncidentService] ReTriageRequestedEvent published for %s (reason=%s)",
+            incident_number, reason,
+        )
 
     async def _publish_state_change(
         self,

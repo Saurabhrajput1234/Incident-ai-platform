@@ -45,6 +45,26 @@ class IncidentStateChangedEvent:
 
 
 @dataclass
+class ReTriageRequestedEvent:
+    """
+    Published by IncidentService.update_incident() when:
+      - assigned_to is cleared (set to null/empty) manually
+      - assignment_group is changed to a different group manually
+
+    Triggers: TriageHandler.handle_retriage()
+
+    Key difference from IncidentCreatedEvent:
+      - preserve_state=True → triage assigns engineer but does NOT change incident state
+      - force=True → bypasses the "already assigned" guard in TriageService
+    """
+    incident_id: str
+    incident_number: str
+    reason: str           # "engineer_removed" | "group_changed"
+    current_state: str    # preserved throughout re-triage
+    triggered_at: datetime = field(default_factory=_now)
+
+
+@dataclass
 class WorkNoteAddedEvent:
     """
     Published by WorkNoteService.add_note() after the note is persisted.
