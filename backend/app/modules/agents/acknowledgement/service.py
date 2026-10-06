@@ -50,7 +50,11 @@ class AcknowledgementService:
 
         res_data = agent_response.result
         intent_info = IntentResult(**res_data["intent_info"])
-        template_used = res_data.get("template_used", "standard_ack.html")
+        template_used = (
+            "salesforce_incorrect_request.html"
+            if intent_info.intent == IntentType.SALESFORCE_INCORRECT_REQUEST
+            else "standard_ack.html"
+        )
 
         tpl_context = {
             "ticket_number": incident.incident_number,
@@ -62,12 +66,7 @@ class AcknowledgementService:
 
         email_text = self.renderer.render_plain_text_email(template_used, tpl_context)
 
-        if intent_info.intent in (
-            IntentType.SALESFORCE_INCORRECT_REQUEST,
-            IntentType.WRONG_REQUEST,
-            IntentType.ACCESS_REQUEST,
-            IntentType.SERVICE_REQUEST,
-        ):
+        if intent_info.intent == IntentType.SALESFORCE_INCORRECT_REQUEST:
             new_state = "on_hold"
             status_desc = "Incident status updated to Pending / On Hold."
         else:

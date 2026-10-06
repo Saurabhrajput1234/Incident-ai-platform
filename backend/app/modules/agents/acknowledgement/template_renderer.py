@@ -18,17 +18,28 @@ class TemplateRenderer:
         )
 
     def render_html(self, template_name: str, context: dict) -> str:
-        """Renders the Jinja2 HTML email template."""
+        """
+        Renders the Jinja2 HTML email template.
+        Only salesforce_incorrect_request.html and standard_ack.html are active.
+        All other templates route to standard_ack.html.
+        """
+        target_template = (
+            "salesforce_incorrect_request.html"
+            if template_name == "salesforce_incorrect_request.html"
+            else "standard_ack.html"
+        )
         try:
-            template = self.env.get_template(template_name)
+            template = self.env.get_template(target_template)
             return template.render(**context)
         except Exception as e:
-            logger.error(f"Error rendering HTML template '{template_name}': {e}")
+            logger.error(f"Error rendering HTML template '{target_template}': {e}")
             return f"<html><body><p>Notification for incident {context.get('ticket_number')}</p></body></html>"
 
     def render_plain_text_email(self, template_name: str, context: dict) -> str:
         """
         Renders a clean, structured plain-text version of the email for work notes & notifications.
+        Only salesforce_incorrect_request.html and standard_ack.html are active.
+        All other requests route to standard_ack.html.
         """
         ticket_num = context.get("ticket_number", "INC0000000")
         caller = context.get("caller_name", "Valued Employee")
@@ -58,61 +69,7 @@ class TemplateRenderer:
                 f"Aman Mourya\n"
                 f"HCL Apps Run-SFDC Support Team"
             )
-        elif template_name == "wrong_ticket_access.html":
-            return (
-                f"Subject: Action Required: Access Request Notice - {ticket_num}\n\n"
-                f"Hello {caller},\n\n"
-                f"We received your ticket regarding: \"{short_desc}\".\n\n"
-                f"[NOTICE: Wrong Ticket Type: Access Request Required]\n"
-                f"You have submitted an Incident Ticket for an Access/Permission request (e.g., Salesforce Org access, SAP roles, or Database permissions). "
-                f"Incidents are reserved for technical outages. Access requests require manager approval via the Access Governance Portal.\n\n"
-                f"Ticket Details:\n"
-                f"• Ticket Number: {ticket_num}\n"
-                f"• Target System / Org: Salesforce Enterprise / App Access\n"
-                f"• Assigned Queue: {group}\n"
-                f"• Status: Redirecting to Access Portal\n\n"
-                f"To obtain proper authorization and fast-track your access to the required Salesforce Org/system, please submit an official Access Request using the link below:\n\n"
-                f"Access Portal Link: https://servicenow.corp.internal/nav_to.do?uri=catalog_service_access.do\n\n"
-                f"Regards,\n"
-                f"Identity & Access Management Team"
-            )
-        elif template_name == "wrong_org_environment.html":
-            return (
-                f"Subject: System Org / Environment Mismatch Notice - {ticket_num}\n\n"
-                f"Hello {caller},\n\n"
-                f"We are reviewing your ticket {ticket_num} (\"{short_desc}\").\n\n"
-                f"[NOTICE: Different Org / Environment Detected]\n"
-                f"Our AI Triage system identified that your request references a different Salesforce Org or environment "
-                f"(e.g. Salesforce EMEA Org / Staging Sandbox vs US Production Org) than the primary queue assigned.\n\n"
-                f"Ticket Details:\n"
-                f"• Ticket Number: {ticket_num}\n"
-                f"• Reported Description: {short_desc}\n"
-                f"• Assigned Support Queue: {group}\n"
-                f"• Assigned Engineer: {engineer}\n"
-                f"• Routing Status: Verifying Target Org\n\n"
-                f"Our assigned engineer {engineer} is verifying the exact Org instance ID to ensure your issue is resolved in the correct Salesforce Org / system environment.\n\n"
-                f"Regards,\n"
-                f"Enterprise Systems Operations Team"
-            )
-        elif template_name == "wrong_ticket_service_catalog.html":
-            return (
-                f"Subject: Action Required: Service Catalog Order Notice - {ticket_num}\n\n"
-                f"Hello {caller},\n\n"
-                f"We received your ticket regarding: \"{short_desc}\".\n\n"
-                f"[NOTICE: Wrong Ticket Type: Service Catalog Order Required]\n"
-                f"You have submitted an Incident Ticket for a hardware or software procurement request (e.g., laptop equipment, monitor, or new software license). "
-                f"Incidents are reserved for system break/fix issues. New procurement requests must be ordered via the Service Catalog portal.\n\n"
-                f"Ticket Details:\n"
-                f"• Ticket Number: {ticket_num}\n"
-                f"• Requested Item: Hardware / Software License\n"
-                f"• Assigned Queue: {group}\n"
-                f"• Status: Redirecting to Service Catalog\n\n"
-                f"To request new equipment or software licenses, please submit an order via the IT Service Catalog using the link below:\n\n"
-                f"Service Catalog Link: https://servicenow.corp.internal/nav_to.do?uri=catalog_hardware_software.do\n\n"
-                f"Regards,\n"
-                f"IT Procurement & Assets Support Team"
-            )
-        else:  # standard_ack.html
+        else:  # standard_ack.html (all other requests routed here)
             return (
                 f"Subject: Incident Assignment Notification - {ticket_num}\n\n"
                 f"Hello {caller},\n\n"

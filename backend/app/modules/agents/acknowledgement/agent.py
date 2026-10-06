@@ -3,8 +3,9 @@ Acknowledgement Agent implementation.
 
 Responsibility:
   1. Check if assignment_group is a Salesforce/SFDC group.
-  2. If non-Salesforce group: Always send simple standard acknowledgement template (standard_ack.html).
-  3. If Salesforce group: Pass full ticket context (group, category, subcategory, descriptions) to LLM to evaluate intent and select template.
+  2. If non-Salesforce group: Always send standard acknowledgement template (standard_ack.html).
+  3. If Salesforce group: Evaluate whether ticket is a SALESFORCE_INCORRECT_REQUEST (requesting access/profile update via incident instead of RITM) -> salesforce_incorrect_request.html.
+     All other requests are routed to standard acknowledgement (standard_ack.html).
 """
 import logging
 from app.modules.agents.base.base_agent import BaseAgent
@@ -57,15 +58,13 @@ class AcknowledgementAgent(BaseAgent):
                 subcategory=incident.subcategory,
             )
 
-            template_mapping = {
-                IntentType.SALESFORCE_INCORRECT_REQUEST: "salesforce_incorrect_request.html",
-                IntentType.STANDARD_INCIDENT: "standard_ack.html",
-                IntentType.ACCESS_REQUEST: "wrong_ticket_access.html",
-                IntentType.SERVICE_REQUEST: "wrong_ticket_service_catalog.html",
-                IntentType.WRONG_REQUEST: "wrong_org_environment.html",
-            }
-            template_name = template_mapping.get(intent_info.intent, "standard_ack.html")
-            reasoning_msg = f"Classified Salesforce intent as '{intent_info.intent.value}' (confidence: {intent_info.confidence:.2f}). Selected template '{template_name}'."
+            if intent_info.intent == IntentType.SALESFORCE_INCORRECT_REQUEST:
+                template_name = "salesforce_incorrect_request.html"
+                reasoning_msg = f"Classified Salesforce intent as '{intent_info.intent.value}' (confidence: {intent_info.confidence:.2f}). Selected template '{template_name}'."
+            else:
+                intent_info.intent = IntentType.STANDARD_INCIDENT
+                template_name = "standard_ack.html"
+                reasoning_msg = f"Classified as Standard Incident (confidence: {intent_info.confidence:.2f}). Selected standard template '{template_name}'."
 
         result_data = {
             "incident_id": incident.incident_id,
