@@ -37,7 +37,6 @@ class AcknowledgementHandler:
         try:
             async with session_factory() as db:
                 # Condition 2 (DB-backed): skip if acknowledgement already sent for this incident.
-                # Uses the existing work_notes table — no new infrastructure needed.
                 already_acked = await self._already_acknowledged(db, event.incident_id)
                 if already_acked:
                     logger.info(
@@ -47,13 +46,24 @@ class AcknowledgementHandler:
                     return
 
                 from app.modules.agents.acknowledgement.service import AcknowledgementService
-                response = await AcknowledgementService(db).process_acknowledgement(
-                    incident_id=event.incident_id
-                )
-                logger.info(
-                    "[AckHandler] %s — success=%s",
-                    event.incident_number, response.success,
-                )
+                from app.modules.agent_executions.logger import agent_execution_log
+
+                async with agent_execution_log(
+                    agent_name="AcknowledgementAgent",
+                    incident_id=event.incident_id,
+                    triggering_event_type="IncidentStateChangedEvent",
+                    triggering_event_id=event.incident_id,
+                    correlation_id=event.incident_number,
+                ) as log:
+                    response = await AcknowledgementService(db).process_acknowledgement(
+                        incident_id=event.incident_id
+                    )
+                    if not response.success:
+                        log.set_result("failed", error="; ".join(response.errors) if response.errors else "ack failed")
+                    logger.info(
+                        "[AckHandler] %s — success=%s",
+                        event.incident_number, response.success,
+                    )
         except Exception as exc:
             logger.error("[AckHandler] %s error: %s", event.incident_id, exc, exc_info=True)
         finally:

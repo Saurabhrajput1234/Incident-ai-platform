@@ -7,6 +7,7 @@ import {
   Upload,
   Plus,
   Sparkles,
+  ScrollText,
 } from 'lucide-react'
 
 export default function Layout() {
@@ -14,7 +15,8 @@ export default function Layout() {
 
   const navItems = [
     { to: '/dashboard', label: 'Overview', icon: LayoutDashboard },
-    { to: '/agents', label: 'Agents', icon: Bot },
+    // { to: '/agents', label: 'Agents', icon: Bot },
+    { to: '/agent-logs', label: 'Agent Logs', icon: ScrollText },
     { to: '/incidents', label: 'Incidents', icon: FileText },
     { to: '/shift-roster', label: 'Shift Roster', icon: CalendarDays },
     { to: '/bulk-import', label: 'Bulk Import', icon: Upload },

@@ -73,24 +73,34 @@ class ResolutionHandler:
         # USER source (or None = manual state change) → run full Resolution Agent
         from app.modules.agents.resolution.service import ResolutionService
         from app.modules.agents.resolution.schemas import ResolutionTrigger
+        from app.modules.agent_executions.logger import agent_execution_log
 
         engine = create_async_engine(settings.DATABASE_URL, future=True)
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         try:
-            async with session_factory() as db:
-                trigger = ResolutionTrigger(
-                    incident_id=event.incident_id,
-                    previous_state=event.previous_state,
-                    current_state="active",  # ResolutionService contract
-                    triggering_work_note_id=event.triggering_work_note_id,
-                    triggering_work_note_source=event.triggering_work_note_source,
-                )
-                response = await ResolutionService(db).process(trigger)
-                action = response.result.get("action", "unknown") if isinstance(response.result, dict) else "unknown"
-                logger.info(
-                    "[ResolutionHandler] %s — success=%s action=%s",
-                    event.incident_number, response.success, action,
-                )
+            async with agent_execution_log(
+                agent_name="ResolutionAgent",
+                incident_id=event.incident_id,
+                triggering_event_type="IncidentStateChangedEvent",
+                triggering_event_id=event.incident_id,
+                correlation_id=event.incident_number,
+            ) as log:
+                async with session_factory() as db:
+                    trigger = ResolutionTrigger(
+                        incident_id=event.incident_id,
+                        previous_state=event.previous_state,
+                        current_state="active",
+                        triggering_work_note_id=event.triggering_work_note_id,
+                        triggering_work_note_source=event.triggering_work_note_source,
+                    )
+                    response = await ResolutionService(db).process(trigger)
+                    action = response.result.get("action", "unknown") if isinstance(response.result, dict) else "unknown"
+                    if not response.success:
+                        log.set_result("failed", error="; ".join(response.errors) if response.errors else "resolution failed")
+                    logger.info(
+                        "[ResolutionHandler] %s — success=%s action=%s",
+                        event.incident_number, response.success, action,
+                    )
         except Exception as exc:
             logger.error(
                 "[ResolutionHandler] %s error: %s",

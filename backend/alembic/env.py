@@ -13,6 +13,7 @@ import app.modules.shift_roster.model  # noqa: F401
 import app.modules.agents.triage.models  # noqa: F401
 import app.modules.work_notes.model  # noqa: F401
 import app.modules.pending_cycles.model  # noqa: F401
+import app.modules.agent_executions.model  # noqa: F401
 
 # this is the Alembic Config object
 config = context.config
