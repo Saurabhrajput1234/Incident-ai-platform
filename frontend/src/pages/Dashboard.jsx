@@ -359,8 +359,8 @@ export default function Dashboard() {
       {/* ── Simple Clean Header ───────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 pb-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">
-            Dashboard
+          <h1  className="text-xl font-bold tracking-tight text-slate-900">
+           Dashboard
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Overview of AI incident management & operations

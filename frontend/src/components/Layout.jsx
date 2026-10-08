@@ -1,4 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import logo1 from '../assets/logo8.png'
+
 import {
   LayoutDashboard,
   Bot,
@@ -28,16 +30,13 @@ export default function Layout() {
       <aside className="w-64 bg-[#0a1124] text-white flex flex-col justify-between shrink-0 h-full border-r border-slate-800/80 p-4 select-none z-20">
         <div>
           {/* Brand Header */}
-          <div className="flex items-center gap-3 px-2 py-3 mb-6">
-            <div className="w-9 h-9 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shadow-sm shadow-blue-500/20 shrink-0">
-              <svg className="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-              </svg>
-            </div>
-            <div>
-              <h1 className="font-bold text-[15px] tracking-tight text-white leading-tight">AI Incident</h1>
-              <p className="text-xs font-semibold text-slate-400 leading-tight">Management</p>
-            </div>
+          <div className="flex flex-col items-center mb-3 gap-0.5">
+            <img
+              src={logo1}
+              alt="MoonX"
+              className="w-full object-contain"
+              style={{ height: '70px', mixBlendMode: 'screen' }}
+            />
           </div>
 
           {/* Main Navigation Links */}
