@@ -45,19 +45,29 @@ class PendingHandler:
             return
 
         from app.modules.agents.pending.service import PendingService
+        from app.modules.agent_executions.logger import agent_execution_log
 
         engine = create_async_engine(settings.DATABASE_URL, future=True)
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         try:
-            async with session_factory() as db:
-                response = await PendingService(db).process_pending_transition(
-                    incident_id=event.incident_id,
-                    changed_by=event.changed_by,
-                )
-                logger.info(
-                    "[PendingHandler] %s — success=%s",
-                    event.incident_number, response.success,
-                )
+            async with agent_execution_log(
+                agent_name="PendingAgent",
+                incident_id=event.incident_id,
+                triggering_event_type="IncidentStateChangedEvent",
+                triggering_event_id=event.incident_id,
+                correlation_id=event.incident_number,
+            ) as log:
+                async with session_factory() as db:
+                    response = await PendingService(db).process_pending_transition(
+                        incident_id=event.incident_id,
+                        changed_by=event.changed_by,
+                    )
+                    if not response.success:
+                        log.set_result("failed", error="; ".join(response.errors) if response.errors else "pending failed")
+                    logger.info(
+                        "[PendingHandler] %s — success=%s",
+                        event.incident_number, response.success,
+                    )
         except Exception as exc:
             logger.error("[PendingHandler] %s error: %s", event.incident_id, exc, exc_info=True)
         finally:

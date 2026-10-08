@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import health, db_health, incidents, shift_roster, triage, ai_health, acknowledgement, dashboard, work_notes, resolution, pending, stats
+from app.api.v1 import health, db_health, incidents, shift_roster, triage, ai_health, acknowledgement, dashboard, work_notes, resolution, pending, stats, agent_logs
 
 api_router = APIRouter()
 
@@ -15,3 +15,4 @@ api_router.include_router(dashboard.router)
 api_router.include_router(stats.router)
 api_router.include_router(work_notes.router)
 api_router.include_router(pending.router)
+api_router.include_router(agent_logs.router)

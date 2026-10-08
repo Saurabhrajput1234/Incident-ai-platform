@@ -78,4 +78,10 @@ export const workNoteApi = {
     api.post(`/incidents/${incidentId}/work-notes`, data).then(r => r.data),
 }
 
+// ── Agent Logs ─────────────────────────────────────────
+export const agentLogApi = {
+  list: (params) => api.get('/agent-logs', { params }).then(r => r.data),
+  stats: () => api.get('/agent-logs/stats').then(r => r.data),
+}
+
 export default api

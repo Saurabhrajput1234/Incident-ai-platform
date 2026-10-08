@@ -19,16 +19,25 @@ class TriageHandler:
             return
 
         from app.modules.agents.triage.service import TriageService
+        from app.modules.agent_executions.logger import agent_execution_log
 
         engine = create_async_engine(settings.DATABASE_URL, future=True)
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         try:
-            async with session_factory() as db:
-                response = await TriageService(db).run_triage(incident_id=event.incident_id)
-                if response.success:
-                    logger.info("[TriageHandler] %s triaged successfully", event.incident_number)
-                else:
-                    logger.warning("[TriageHandler] %s triage failed: %s", event.incident_number, response.errors)
+            async with agent_execution_log(
+                agent_name="TriageAgent",
+                incident_id=event.incident_id,
+                triggering_event_type="IncidentCreatedEvent",
+                triggering_event_id=event.incident_id,
+                correlation_id=event.incident_number,
+            ) as log:
+                async with session_factory() as db:
+                    response = await TriageService(db).run_triage(incident_id=event.incident_id)
+                    if response.success:
+                        logger.info("[TriageHandler] %s triaged successfully", event.incident_number)
+                    else:
+                        logger.warning("[TriageHandler] %s triage failed: %s", event.incident_number, response.errors)
+                        log.set_result("failed", error="; ".join(response.errors) if response.errors else "triage failed")
         except Exception as exc:
             logger.error("[TriageHandler] %s error: %s", event.incident_id, exc, exc_info=True)
         finally:
@@ -37,13 +46,9 @@ class TriageHandler:
     async def handle_retriage(self, event: ReTriageRequestedEvent) -> None:
         """
         Re-triage handler — fires when engineer is removed or group is changed manually.
-
-        Key behaviours:
-          - force=True       → bypasses "already assigned" guard
-          - preserve_state=True → does NOT change incident state after assigning engineer
-          - State remains exactly what it was (on_hold stays on_hold, in_progress stays in_progress)
         """
         from app.modules.agents.triage.service import TriageService
+        from app.modules.agent_executions.logger import agent_execution_log
 
         logger.info(
             "[ReTriageHandler] %s re-triage requested (reason=%s, state=%s)",
@@ -53,17 +58,25 @@ class TriageHandler:
         engine = create_async_engine(settings.DATABASE_URL, future=True)
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         try:
-            async with session_factory() as db:
-                response = await TriageService(db).run_triage(
-                    incident_id=event.incident_id,
-                    force=True,
-                    preserve_state=True,
-                    retriage_reason=event.reason,
-                )
-                if response.success:
-                    logger.info("[ReTriageHandler] %s re-assigned successfully", event.incident_number)
-                else:
-                    logger.warning("[ReTriageHandler] %s re-triage failed: %s", event.incident_number, response.errors)
+            async with agent_execution_log(
+                agent_name="TriageAgent",
+                incident_id=event.incident_id,
+                triggering_event_type="ReTriageRequestedEvent",
+                triggering_event_id=event.incident_id,
+                correlation_id=event.incident_number,
+            ) as log:
+                async with session_factory() as db:
+                    response = await TriageService(db).run_triage(
+                        incident_id=event.incident_id,
+                        force=True,
+                        preserve_state=True,
+                        retriage_reason=event.reason,
+                    )
+                    if response.success:
+                        logger.info("[ReTriageHandler] %s re-assigned successfully", event.incident_number)
+                    else:
+                        logger.warning("[ReTriageHandler] %s re-triage failed: %s", event.incident_number, response.errors)
+                        log.set_result("failed", error="; ".join(response.errors) if response.errors else "retriage failed")
         except Exception as exc:
             logger.error("[ReTriageHandler] %s error: %s", event.incident_id, exc, exc_info=True)
         finally:
